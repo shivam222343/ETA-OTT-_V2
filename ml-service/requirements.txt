@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+transformers
+torch
+torchvision
+torchaudio
+pillow
+pymupdf
+openai-whisper
+python-multipart
+pydantic
+requests
+python-dotenv
+cloudinary
+moviepy
+yt-dlp
