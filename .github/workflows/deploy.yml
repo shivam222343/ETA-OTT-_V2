@@ -25,7 +25,7 @@ jobs:
 
       - name: Build & Push Frontend
         run: |
-          docker build -t rmane0069/eta-frontend:latest ./frontend
+          docker build -t rmane0069/eta-frontend:latest ./eta-web
           docker push rmane0069/eta-frontend:latest
 
       - name: Build & Push ML Service
