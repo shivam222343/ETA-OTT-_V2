@@ -19,7 +19,7 @@ COPY . .
 
 # Copy the .env file for Vite build
 # This file should be created before docker build with the VITE_* vars
-COPY .env.docker .env
+# COPY .env.docker .env
 
 RUN npm run build
 
