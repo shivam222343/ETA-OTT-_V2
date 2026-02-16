@@ -50,7 +50,7 @@ export default function ContentViewer({ isOpen, onClose, content }) {
 
         if (isCloudinary) {
             return {
-                url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/content/view/proxy?url=${encodeURIComponent(content.file.url)}`,
+                url: `${import.meta.env.VITE_API_URL || '/api'}/content/view/proxy?url=${encodeURIComponent(content.file.url)}`,
                 httpHeaders: {
                     Authorization: `Bearer ${localStorage.getItem('token')}`
                 }

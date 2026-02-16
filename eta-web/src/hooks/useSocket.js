@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// For deployment: VITE_API_URL is "/api" (relative), so Socket.IO connects to same origin
+// For local dev: VITE_API_URL is "http://localhost:5000/api", extract just the origin
+const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const SOCKET_URL = rawApiUrl.startsWith('http')
+    ? new URL(rawApiUrl).origin
+    : ''; // empty string = same origin (works with Nginx proxy)
 
 export const useSocket = () => {
     const [socket, setSocket] = useState(null);
