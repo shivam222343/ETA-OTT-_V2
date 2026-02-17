@@ -98,7 +98,7 @@ def download_file(url):
         raise e
 
 
-async def extract_pdf(file_url):
+def extract_pdf(file_url):
     try:
         # Download PDF
         pdf_content = download_file(file_url)

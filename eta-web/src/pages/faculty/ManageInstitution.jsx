@@ -55,7 +55,7 @@ export default function ManageInstitution() {
 
             // Fetch courses for this institution
             const coursesResponse = await apiClient.get(`/courses/institution/${institutionId}`);
-            setCourses(coursesResponse.data.data.courses || []);
+            setCourses((coursesResponse.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
         } catch (error) {
             console.error('Fetch institution data error:', error);
             toast.error('Failed to load institution data');

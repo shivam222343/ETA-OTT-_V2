@@ -25,7 +25,13 @@ import {
     getContentGraph,
     deleteContentNode
 } from '../services/graph/content.graph.js';
+import { processContent } from '../services/content_processing.service.js';
 import { emitToCourse } from '../services/websocket.service.js';
+import GeneratedPDF from '../models/GeneratedPDF.model.js';
+import { cleanScrapedContent } from '../services/contentCleaner.service.js';
+import { formatContentWithAI } from '../services/aiFormatter.service.js';
+import { generateStyledPDF } from '../services/pdfGenerator.service.js';
+import { uploadBufferToCloudinary } from '../config/cloudinary.config.js';
 
 const router = express.Router();
 
@@ -42,7 +48,7 @@ router.get('/recent', authenticate, attachUser, async (req, res) => {
         }
 
         const recentContent = await Content.find(query)
-            .populate('courseId', 'name')
+            .populate('courseId', 'name code')
             .populate('uploadedBy', 'profile.name')
             .sort({ createdAt: -1 })
             .limit(10);
@@ -346,183 +352,108 @@ router.post('/web', authenticate, attachUser, requireFaculty, async (req, res) =
     }
 });
 
-// Background processing function
-async function processContent(contentId, contentType, fileUrl) {
+/**
+ * Redesigned Pipeline: Generate Professional Styled PDF from Scraped Web Content
+ * Workflow: Scrape -> Clean -> AI Format -> Generate Styled PDF -> Upload
+ */
+router.post('/generate-pdf', authenticate, attachUser, async (req, res) => {
     try {
-        console.log(`🌀 Starting background processing for content: ${contentId} (${contentType})`);
-        const content = await Content.findById(contentId);
-        if (!content) {
-            console.error(`❌ Content ${contentId} not found in database`);
-            return;
+        const { url, title: userTitle } = req.body;
+
+        if (!url) {
+            return res.status(400).json({ success: false, message: 'URL is required' });
         }
 
-        // 1. Mark as processing
-        content.processingStatus = 'processing';
-        content.processingProgress = 10;
-        await content.save();
-        console.log(`📊 [${contentId}] Status: processing, Progress: 10%`);
+        console.log(`🚀 Starting PDF Generation Pipeline for: ${url}`);
 
-        let extractedData = {};
-
-        // 2. Extract data based on content type
+        // 1. Fetch raw HTML content
+        let rawHtml;
         try {
-            console.log(`🔍 [${contentId}] Extracting ${contentType} data via ML service...`);
-            if (contentType === 'pdf' || contentType === 'video' || contentType === 'youtube' || contentType === 'web') {
-                const mlData = await extractWithML(fileUrl, contentId, contentType);
-
-                if (contentType === 'pdf') {
-                    extractedData = {
-                        text: mlData.text,
-                        summary: mlData.summary,
-                        topics: mlData.topics,
-                        keywords: mlData.keywords,
-                        structure: mlData.structure,
-                        metadata: mlData.metadata
-                    };
-                } else if (contentType === 'video' || contentType === 'youtube') {
-                    extractedData = {
-                        text: mlData.text,
-                        summary: mlData.summary,
-                        topics: mlData.topics || [],
-                        keywords: mlData.keywords || [],
-                        metadata: {
-                            ...mlData.metadata,
-                            duration: mlData.duration,
-                            language: mlData.language
-                        }
-                    };
-
-                    // Update content with video specific info
-                    content.file.duration = mlData.duration;
-                    if (mlData.metadata && mlData.metadata.thumbnail) {
-                        content.file.thumbnail = {
-                            url: mlData.metadata.thumbnail,
-                            publicId: mlData.metadata.thumbnail_public_id || ''
-                        };
-                    } else if (mlData.thumbnail_url) {
-                        content.file.thumbnail = {
-                            url: mlData.thumbnail_url,
-                            publicId: mlData.thumbnail_public_id || ''
-                        };
-                    }
-                } else if (contentType === 'web') {
-                    extractedData = {
-                        text: mlData.text,
-                        raw_text: mlData.raw_text,
-                        summary: mlData.summary,
-                        topics: mlData.topics || [],
-                        keywords: mlData.keywords || [],
-                        metadata: {
-                            ...mlData.metadata,
-                            title: mlData.title,
-                            url: mlData.url
-                        }
-                    };
-
-                    // Update content with title from web page if user didn't provide one
-                    if (mlData.title) {
-                        content.title = mlData.title;
-                    }
-
-                    if (mlData.pdf_url) {
-                        content.file.url = mlData.pdf_url;
-                        content.file.publicId = mlData.pdf_public_id || '';
-                        content.file.format = 'pdf';
-                    }
-
-                    if (mlData.docx_url) {
-                        extractedData.metadata.docxUrl = mlData.docx_url;
-                        extractedData.metadata.docxPublicId = mlData.docx_public_id || '';
-                    }
-
-                    if (mlData.thumbnail_url) {
-                        content.file.thumbnail = {
-                            url: mlData.thumbnail_url,
-                            publicId: mlData.thumbnail_public_id || ''
-                        };
-                    }
-                }
-
-                // Handle PDF thumbnail if generated
-                if (contentType === 'pdf' && mlData.thumbnail_url) {
-                    content.file.thumbnail = {
-                        url: mlData.thumbnail_url,
-                        publicId: mlData.thumbnail_public_id || ''
-                    };
-                }
-            } else if (contentType === 'code' || contentType === 'document') {
-                const codeData = await extractCodeData(fileUrl, content.title);
-                extractedData = {
-                    text: codeData.text,
-                    summary: codeData.summary,
-                    topics: codeData.topics,
-                    keywords: codeData.keywords,
-                    metadata: codeData.metadata
-                };
-            }
-        } catch (extractionError) {
-            console.error(`❌ [${contentId}] Extraction failed:`, extractionError);
-            throw extractionError;
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                timeout: 15000
+            });
+            rawHtml = response.data;
+        } catch (fetchError) {
+            console.error('Failed to fetch URL:', fetchError.message);
+            return res.status(400).json({ success: false, message: 'Failed to fetch website content. Ensure the URL is accessible.' });
         }
 
-        content.processingProgress = 40;
-        await content.save();
-        console.log(`📊 [${contentId}] Progress: 40% (Extraction complete)`);
+        // 2. Step 1: Clean Content
+        console.log('🧹 Cleaning scraped content...');
+        const cleanText = cleanScrapedContent(rawHtml);
 
-        // 3. Update content with extracted data
-        content.extractedData = extractedData;
-        content.processingProgress = 60;
-        await content.save();
-        console.log(`📊 [${contentId}] Progress: 60% (Data saved)`);
+        if (!cleanText || cleanText.length < 100) {
+            return res.status(400).json({ success: false, message: 'Could not extract sufficient text from this website.' });
+        }
 
-        // 4. Create graph structure
+        // 3. Step 2: AI Format
+        console.log('🤖 Formatting content with AI (Groq)...');
+        let formattedMarkdown;
         try {
-            console.log(`🕸️ [${contentId}] Creating graph nodes...`);
-            const graphNodeId = await createContentNode(content);
-            content.graphNodeId = graphNodeId;
-            content.processingProgress = 80;
-            await content.save();
-            console.log(`📊 [${contentId}] Progress: 80% (Graph created)`);
-
-            // Link to course
-            await linkContentToCourse(content._id, content.courseId);
-
-            // Create topic nodes if available
-            if (extractedData.topics && extractedData.topics.length > 0) {
-                await createTopicNodes(content._id, extractedData.topics);
-            }
-
-            // Link related content
-            await linkRelatedContent(content._id);
-        } catch (graphError) {
-            console.error(`❌ [${contentId}] Graph processing failed:`, graphError);
-            // We don't necessarily want to fail the whole process if graph fails, 
-            // but for now let's keep it strict or log it.
+            formattedMarkdown = await formatContentWithAI(cleanText);
+        } catch (aiError) {
+            console.error('AI Formatting failed:', aiError.message);
+            return res.status(500).json({ success: false, message: 'AI failed to structure the content.' });
         }
 
-        // 5. Complete processing
-        content.processingStatus = 'completed';
-        content.processingProgress = 100;
-        content.isPublished = true; // Auto-publish on success
-        if (!content.publishedAt) content.publishedAt = new Date();
+        // 4. Step 3: Generate Styled PDF
+        console.log('📄 Generating styled PDF with Puppeteer...');
+        let pdfBuffer;
+        try {
+            pdfBuffer = await generateStyledPDF(formattedMarkdown);
+        } catch (pdfError) {
+            console.error('PDF Generation failed:', pdfError.message);
+            return res.status(500).json({ success: false, message: 'Failed to generate PDF document.' });
+        }
 
-        await content.save();
-        console.log(`✅ [${contentId}] Content processed successfully!`);
+        // 5. Step 4: Upload to Cloudinary
+        console.log('☁️ Uploading PDF to Cloudinary...');
+        let uploadResult;
+        try {
+            const safeTitle = (userTitle || 'Notes').replace(/[^\w\s]/gi, '').substring(0, 30);
+            uploadResult = await uploadBufferToCloudinary(pdfBuffer, 'eta-content/pdf', safeTitle);
+        } catch (uploadError) {
+            console.error('Cloudinary upload failed:', uploadError.message);
+            return res.status(500).json({ success: false, message: 'Failed to save PDF to cloud storage.' });
+        }
+
+        // 6. Save to MongoDB
+        console.log('💾 Saving record to database...');
+        const autoTitle = formattedMarkdown.match(/^# (.*)$/m)?.[1] || userTitle || 'Untitled Notes';
+
+        const generatedPdf = await GeneratedPDF.create({
+            userId: req.dbUser._id,
+            title: autoTitle,
+            originalUrl: url,
+            pdfUrl: uploadResult.url
+        });
+
+        console.log('✅ Pipeline Complete!');
+        res.status(201).json({
+            success: true,
+            message: 'Professional PDF generated successfully!',
+            data: {
+                id: generatedPdf._id,
+                title: generatedPdf.title,
+                url: generatedPdf.pdfUrl,
+                originalUrl: generatedPdf.originalUrl
+            }
+        });
+
     } catch (error) {
-        console.error(`❌ Content processing failed for ${contentId}:`, error);
-        try {
-            const content = await Content.findById(contentId);
-            if (content) {
-                content.processingStatus = 'failed';
-                content.processingError = error.message;
-                content.processingProgress = 100; // Stop the progress bar
-                await content.save();
-            }
-        } catch (saveError) {
-            console.error('❌ Failed to save failure status:', saveError);
-        }
+        console.error('PDF Pipeline Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An unexpected error occurred during PDF generation.',
+            error: error.message
+        });
     }
-}
+});
+
+
 
 
 // Get content by ID
@@ -802,8 +733,8 @@ router.get('/course/:courseId/graph', authenticate, attachUser, async (req, res)
     }
 });
 
-// Reprocess content
-router.post('/:id/reprocess', authenticate, attachUser, requireFaculty, async (req, res) => {
+// Reprocess content (Automatic restart if opened again)
+router.post('/:id/reprocess', authenticate, attachUser, async (req, res) => {
     try {
         const content = await Content.findById(req.params.id);
         if (!content) {
@@ -813,18 +744,33 @@ router.post('/:id/reprocess', authenticate, attachUser, requireFaculty, async (r
             });
         }
 
-        // Verify authorization
-        if (content.uploadedBy.toString() !== req.dbUser._id.toString()) {
+        // Authorization: Faculty of the course OR student who has access to the content
+        const isFaculty = req.dbUser.role === 'faculty' && content.uploadedBy.toString() === req.dbUser._id.toString();
+        const isStudentWithAccess = req.dbUser.role === 'student' && content.branchIds.some(bid => req.dbUser.branchIds.includes(bid));
+
+        if (!isFaculty && !isStudentWithAccess) {
             return res.status(403).json({
                 success: false,
                 message: 'You are not authorized to reprocess this content'
             });
         }
 
+        // Only allow restart if it's completed, failed, or stalled
+        // If it's already processing, don't start another one
+        if (content.processingStatus === 'processing') {
+            return res.json({
+                success: true,
+                message: 'Content is already being processed'
+            });
+        }
+
         // Start reprocessing
         content.processingStatus = 'pending';
         content.processingError = null;
+        content.processingProgress = 0;
         await content.save();
+
+        console.log(`♻️ Restarting processing for content: ${content.title} (${content._id})`);
 
         processContent(content._id, content.type, content.file.url).catch(err => {
             console.error('Reprocessing error:', err);
@@ -839,6 +785,47 @@ router.post('/:id/reprocess', authenticate, attachUser, requireFaculty, async (r
         res.status(500).json({
             success: false,
             message: 'Failed to reprocess content',
+            error: error.message
+        });
+    }
+});
+
+// Cancel processing content
+router.patch('/:id/cancel-processing', authenticate, attachUser, async (req, res) => {
+    try {
+        const content = await Content.findById(req.params.id);
+        if (!content) {
+            return res.status(404).json({ success: false, message: 'Content not found' });
+        }
+
+        // Only allow cancel if it's currently processing or pending
+        if (content.processingStatus === 'processing' || content.processingStatus === 'pending') {
+            content.processingStatus = 'failed';
+            content.processingError = 'Processing stopped by user';
+            content.processingProgress = 0;
+            await content.save();
+
+            // Also abort the ML service call if it's active
+            const { cancelMLRequest } = await import('../services/extraction/ml.service.js');
+            cancelMLRequest(req.params.id);
+
+            console.log(`🛑 User requested cancellation for content: ${req.params.id}`);
+
+            return res.json({
+                success: true,
+                message: 'Processing has been stopped and marked as failed.'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Content was not in a processable state, or already finished.'
+        });
+    } catch (error) {
+        console.error('Cancel processing error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to cancel processing',
             error: error.message
         });
     }

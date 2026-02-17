@@ -40,3 +40,30 @@ export async function deleteFromCloudinary(publicId) {
         throw error;
     }
 }
+// Helper function to upload buffer
+export async function uploadBufferToCloudinary(buffer, folder = 'eta-content/pdf', fileName = 'generated_notes') {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                folder,
+                resource_type: 'raw',
+                public_id: `${fileName}_${Date.now()}`,
+                format: 'pdf'
+            },
+            (error, result) => {
+                if (error) {
+                    console.error('Cloudinary buffer upload error:', error);
+                    reject(error);
+                } else {
+                    resolve({
+                        url: result.secure_url,
+                        publicId: result.public_id,
+                        format: result.format,
+                        resourceType: result.resource_type
+                    });
+                }
+            }
+        );
+        uploadStream.end(buffer);
+    });
+}

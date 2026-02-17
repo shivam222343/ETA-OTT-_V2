@@ -22,7 +22,7 @@ cloudinary.config(
     secure=True
 )
 
-async def extract_web_content(url):
+def extract_web_content(url):
     """
     Extract content from a web page, simplify it using AI, and generate a thumbnail.
     """
@@ -142,17 +142,17 @@ async def extract_web_content(url):
             
             # Trying Playwright if installed
             try:
-                from playwright.async_api import async_playwright
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch()
-                    context = await browser.new_context(
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    context = browser.new_context(
                         user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                         viewport={'width': 1280, 'height': 720}
                     )
-                    page = await context.new_page()
-                    await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                    thumbnail_bytes = await page.screenshot(type='jpeg', quality=80)
-                    await browser.close()
+                    page = context.new_page()
+                    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                    thumbnail_bytes = page.screenshot(type='jpeg', quality=80)
+                    browser.close()
                     
                     # Upload to Cloudinary
                     upload_result = cloudinary.uploader.upload(
