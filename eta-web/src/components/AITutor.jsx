@@ -271,6 +271,15 @@ const StageItem = memo(({ type, content, video, isFinal }) => {
                             </div>
                             <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 truncate">Recommended Tutorial</span>
                         </div>
+                        <a
+                            href={video}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 rounded-md text-[9px] font-bold text-blue-600 transition-colors"
+                        >
+                            <ArrowUpRight className="w-3 h-3" />
+                            YOUTUBE
+                        </a>
                     </div>
                     <div className="w-full relative bg-black aspect-video">
                         <ReactPlayer
@@ -287,20 +296,12 @@ const StageItem = memo(({ type, content, video, isFinal }) => {
     );
 });
 
-const SequentialFlow = ({ content, onComplete, scrollRef, speak }) => {
-    const [visibleStages, setVisibleStages] = useState([]);
-    const [currentStageIndex, setCurrentStageIndex] = useState(0);
-    const [typingText, setTypingText] = useState('');
-    const [isTyping, setIsTyping] = useState(false);
-    const [codeTypingSpeed, setCodeTypingSpeed] = useState(45);
-
+const SequentialFlow = ({ content, onComplete, scrollRef, speak, messageId, suggestedVideo, shouldSpeak }) => {
     const stages = useMemo(() => {
         const parts = [];
         const markers = ['[[INTRO]]', '[[CONCEPT]]', '[[CODE]]', '[[SUMMARY]]'];
 
-        let lastIndex = 0;
-
-        const findNextMarker = (index) => {
+        let findNextMarker = (index) => {
             let earliest = -1;
             let foundMarker = '';
             markers.forEach(m => {
@@ -336,123 +337,53 @@ const SequentialFlow = ({ content, onComplete, scrollRef, speak }) => {
         if (parts.length === 0) {
             const videoMatchInside = content.match(/\[\[VIDEO:\s*(https?:\/\/[^\]]+)\]\]/);
             const videoMatchRaw = content.match(/https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/[^\s]+/);
-
             const videoUrl = videoMatchInside ? videoMatchInside[1] : (videoMatchRaw ? videoMatchRaw[0] : null);
             const cleanContent = content.replace(/\[\[VIDEO:?\s*[^\]]*\]\]/g, '').replace(/https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/[^\s]+/g, '').trim();
 
-            parts.push({
-                type: 'CONCEPT',
-                content: cleanContent,
-                video: videoUrl
-            });
+            parts.push({ type: 'CONCEPT', content: cleanContent, video: videoUrl });
         }
 
-        // Ensure video is attached to the last stage for proper display
+        // Consolidate videos: prioritize embedded video, fallback to suggestedVideo
         const videoInAnyStage = parts.find(p => p.video);
         if (videoInAnyStage && parts.length > 0) {
-            // Move video to last stage
+            // If AI embedded a video in text, use that
             parts.forEach(p => p.video = null);
             parts[parts.length - 1].video = videoInAnyStage.video;
+        } else if (suggestedVideo && parts.length > 0) {
+            // Otherwise use backend's suggested video
+            parts[parts.length - 1].video = suggestedVideo.url;
         }
 
         return parts;
-    }, [content]);
+    }, [content, suggestedVideo]);
 
+    // Fast sequential rendering without char-by-char typing
     useEffect(() => {
-        if (currentStageIndex < stages.length) {
-            const stage = stages[currentStageIndex];
-            setIsTyping(true);
-            setTypingText('');
-
-            if (stage.type === 'CODE') {
-                const conceptStage = stages.find(s => s.type === 'CONCEPT');
-                const conceptLength = conceptStage?.content.length || 100;
-                const speed = Math.max(20, Math.min(80, Math.floor(conceptLength / 6)));
-                setCodeTypingSpeed(speed);
-            } else {
-                setCodeTypingSpeed(45);
-            }
-
-            let charIndex = 0;
-            const textToType = stage.content;
-
-            // Higher performance typing with slower updates but larger chunks
-            // This gives the browser's speech engine more airtime
-            const typingInterval = stage.type === 'CODE' ? 40 : 60;
-
-            // Initialize speech with a slight delay to allow typing render to stabilize
-            let speechTimer = null;
-            if (stage.type !== 'CODE') {
-                speechTimer = setTimeout(() => {
-                    speak(stage.content, `stage-${currentStageIndex}`);
-                }, 200);
-            }
-
-            let timer = null;
-            const typeNext = () => {
-                if (charIndex < textToType.length) {
-                    // Aggressive chunking to minimize React work
-                    let chunkSize = stage.type === 'CODE' ? 8 : 4;
-                    if (textToType.length > 800) chunkSize = 12;
-                    else if (textToType.length > 400) chunkSize = 8;
-
-                    const slice = textToType.substring(charIndex, charIndex + chunkSize);
-                    setTypingText(prev => prev + slice);
-                    charIndex += chunkSize;
-
-                    if (scrollRef.current) {
-                        requestAnimationFrame(() => {
-                            if (scrollRef.current) {
-                                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                            }
-                        });
-                    }
-                    timer = setTimeout(typeNext, typingInterval);
-                } else {
-                    setIsTyping(false);
-                    setVisibleStages(prev => [...prev, { ...stage, finalContent: textToType }]);
-                    setCurrentStageIndex(prev => prev + 1);
-                }
-            };
-
-            // Start typing
-            timer = setTimeout(typeNext, 50);
-
-            return () => {
-                if (timer) clearTimeout(timer);
-                if (speechTimer) clearTimeout(speechTimer);
-            };
-        } else {
-            if (onComplete) onComplete();
+        // Speak full content immediately only during initial typing phase
+        if (shouldSpeak) {
+            speak(content, messageId);
         }
-    }, [currentStageIndex, stages, onComplete]);
+
+        // Signal completion immediately
+        if (onComplete) onComplete();
+
+        // Scroll to bottom
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [content, messageId, shouldSpeak]);
 
     return (
         <div className="space-y-4">
-            {visibleStages.map((s, i) => (
+            {stages.map((s, i) => (
                 <StageItem
                     key={i}
                     type={s.type}
-                    content={s.finalContent}
-                    video={i === visibleStages.length - 1 ? s.video : null}
-                    isFinal={i === visibleStages.length - 1}
+                    content={s.content}
+                    video={s.video}
+                    isFinal={i === stages.length - 1}
                 />
             ))}
-            {isTyping && (
-                <div className="mb-4">
-                    {stages[currentStageIndex]?.type === 'CODE' && typingText.length < 50 ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground italic">
-                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                            Preparing code example...
-                        </div>
-                    ) : (
-                        <>
-                            {formatMessage(typingText)}
-                            <span className="animate-pulse inline-block ml-1 border-r-2 border-primary h-4" />
-                        </>
-                    )}
-                </div>
-            )}
         </div>
     );
 };
@@ -623,7 +554,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                 visualContext: visualContext,
                 courseId: courseId,
                 contentId: contentId,
-                language: targetLanguage
+                language: /hindi|samajha|kaise|kya|kyun|hindi|hinglish/i.test(userQuery) ? 'hindi' : targetLanguage
             });
 
             const { doubt, source, isSaved } = response.data.data;
@@ -670,23 +601,9 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
 
     const handleTypingComplete = useCallback((id) => {
         setMessages(prev => {
-            const updated = prev.map(msg =>
+            return prev.map(msg =>
                 msg.id === id ? { ...msg, isTyping: false } : msg
             );
-
-            const finishedMsg = updated.find(m => m.id === id);
-            if (finishedMsg?.pendingVideo) {
-                return [
-                    ...updated,
-                    {
-                        role: 'assistant',
-                        id: `v-${id}`,
-                        suggestedVideo: finishedMsg.pendingVideo,
-                        isVideoMessage: true
-                    }
-                ];
-            }
-            return updated;
         });
     }, []);
 
@@ -750,7 +667,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
         if (selectedVoice && !selectedVoice.isExpert) {
             utterance.voice = selectedVoice;
         }
-        utterance.rate = 0.9;
+        utterance.rate = 1.1; // Slightly increased speed as requested
         utterance.pitch = 1.0;
 
         utterance.onstart = () => setSpeaking(id);
@@ -873,163 +790,128 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                             <div className="space-y-2 max-w-full overflow-hidden">
                                 <div className={`py-1 text-sm leading-relaxed transition-all duration-300 w-full overflow-hidden`}>
 
-                                    {msg.role === 'assistant' && msg.isTyping ? (
-                                        <SequentialFlow
-                                            content={msg.content}
-                                            scrollRef={scrollRef}
-                                            speak={speak}
-                                            onComplete={() => handleTypingComplete(msg.id)}
-                                        />
-                                    ) : (
-                                        <>
-                                            {msg.isVideoMessage && msg.suggestedVideo && (
-                                                <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card shadow-xl w-full max-w-full">
-                                                    <div className="p-3 bg-blue-500/5 border-b flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="p-1 bg-blue-500 rounded-lg shrink-0">
-                                                                <Youtube className="w-4 h-4 text-white" />
-                                                            </div>
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 truncate">Recommended Tutorial</span>
-                                                                {msg.suggestedVideo.searchQuery && (
-                                                                    <span className="text-[8px] text-muted-foreground italic truncate max-w-[150px]">Topic: {msg.suggestedVideo.searchQuery.split(' ')[0]}...</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <a
-                                                            href={msg.suggestedVideo.url}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 rounded-md text-[9px] font-bold text-blue-600 transition-colors"
-                                                        >
-                                                            <ArrowUpRight className="w-3 h-3" />
-                                                            YOUTUBE
-                                                        </a>
-                                                    </div>
-                                                    <div className="w-full relative bg-black aspect-video">
-                                                        <ReactPlayer
-                                                            url={msg.suggestedVideo.url}
-                                                            width="100%"
-                                                            height="100%"
-                                                            style={{ position: 'absolute', top: 0, left: 0 }}
-                                                            controls={true}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {!msg.isVideoMessage && (
-                                                <div className="space-y-4">
-                                                    <div>{formatMessage(msg.content)}</div>
+                                    {msg.role === 'assistant' ? (
+                                        <div className="space-y-4">
+                                            <SequentialFlow
+                                                content={msg.content}
+                                                scrollRef={scrollRef}
+                                                speak={speak}
+                                                messageId={msg.id}
+                                                suggestedVideo={msg.pendingVideo}
+                                                shouldSpeak={msg.isTyping}
+                                                onComplete={() => msg.isTyping && handleTypingComplete(msg.id)}
+                                            />
 
-                                                    {!msg.isTyping && msg.role === 'assistant' && (
-                                                        <motion.div
-                                                            initial={{ opacity: 0, y: 5 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            className={`p-4 rounded-2xl transition-all border ${msg.source === 'KNOWLEDGE_GRAPH'
-                                                                ? 'bg-emerald-500/5 dark:bg-emerald-500/5 border-emerald-500/30'
-                                                                : msg.isSaved
-                                                                    ? 'bg-amber-500/5 border-amber-500/30'
-                                                                    : 'bg-white/5 dark:bg-black/20 dark:border-white/5 border-white/10'
-                                                                } backdrop-blur-md shadow-inner`}
-                                                        >
-                                                            <div className="flex items-center justify-between flex-wrap gap-4">
-                                                                <div className="flex items-center gap-3 flex-wrap">
-                                                                    {msg.source === 'KNOWLEDGE_GRAPH' ? (
-                                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full group cursor-help" title="Verified answer from the institutional knowledge base">
-                                                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
-                                                                            <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight flex items-center gap-2">
-                                                                                🟢 <span className="mt-0.5">Knowledge Graph Hit</span>
-                                                                            </span>
-                                                                        </div>
-                                                                    ) : msg.isSaved ? (
-                                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full group cursor-help" title="High confidence AI response saved for future learning">
-                                                                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
-                                                                            <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-tight flex items-center gap-2">
-                                                                                🟡 <span className="mt-0.5">Learned Resolution</span>
-                                                                            </span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full group cursor-help" title="Real-time AI response (not yet in database)">
-                                                                            <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.8)]" />
-                                                                            <span className="text-[11px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-tight flex items-center gap-2">
-                                                                                🔴 <span className="mt-0.5">AI API Response</span>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {msg.confidence && (
-                                                                        <div className={`px-2 py-1 rounded-lg text-[11px] font-bold ${msg.confidence >= 85 ? 'text-emerald-500' :
-                                                                            msg.confidence >= 70 ? 'text-amber-500' :
-                                                                                'text-rose-500'
-                                                                            }`}>
-                                                                            {Math.round(msg.confidence)}% Reliability
-                                                                        </div>
-                                                                    )}
+                                            {!msg.isTyping && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 5 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className={`p-4 rounded-2xl transition-all border ${msg.source === 'KNOWLEDGE_GRAPH'
+                                                        ? 'bg-emerald-500/5 dark:bg-emerald-500/5 border-emerald-500/30'
+                                                        : msg.isSaved
+                                                            ? 'bg-amber-500/5 border-amber-500/30'
+                                                            : 'bg-white/5 dark:bg-black/20 dark:border-white/5 border-white/10'
+                                                        } backdrop-blur-md shadow-inner`}
+                                                >
+                                                    <div className="flex items-center justify-between flex-wrap gap-4">
+                                                        <div className="flex items-center gap-3 flex-wrap">
+                                                            {msg.source === 'KNOWLEDGE_GRAPH' ? (
+                                                                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full group cursor-help" title="Verified answer from the institutional knowledge base">
+                                                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                                                                    <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight flex items-center gap-2">
+                                                                        🟢 <span className="mt-0.5">Knowledge Graph Hit</span>
+                                                                    </span>
                                                                 </div>
-
-                                                                <div className="flex items-center gap-2">
-                                                                    {!msg.escalated ? (
-                                                                        <button
-                                                                            onClick={() => handleEscalate(msg.doubtId, msg.id)}
-                                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all text-[11px] font-bold border ${msg.confidence >= 85 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500 hover:text-white' :
-                                                                                msg.confidence >= 70 ? 'bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500 hover:text-white' :
-                                                                                    'bg-rose-500/10 text-rose-600 border-rose-500/20 hover:bg-rose-500 hover:text-white font-black animate-pulse'
-                                                                                }`}
-                                                                            title={msg.confidence < 70 ? "Low reliability - Highly recommended to escalate" : "Need more help? Escalate to your mentor"}
-                                                                        >
-                                                                            <ArrowUpRight className="w-3.5 h-3.5" />
-                                                                            <span>{msg.confidence < 70 ? "Escalate to Mentor" : "Escalate"}</span>
-                                                                        </button>
-                                                                    ) : (
-                                                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 rounded-full text-[11px] font-bold border border-emerald-500/20">
-                                                                            <CheckCircle2 className="w-3.5 h-3.5" />
-                                                                            <span>Escalated</span>
-                                                                        </div>
-                                                                    )}
-
-                                                                    <button
-                                                                        onClick={() => speak(msg.content, msg.id)}
-                                                                        className={`p-2 rounded-xl transition-all ${speaking === msg.id ? 'bg-primary text-white shadow-lg' : 'hover:bg-primary/10 text-primary'}`}
-                                                                        title="Listen again"
-                                                                    >
-                                                                        <Volume2 className={`w-4 h-4 ${speaking === msg.id ? 'animate-pulse' : ''}`} />
-                                                                    </button>
+                                                            ) : msg.isSaved ? (
+                                                                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full group cursor-help" title="High confidence AI response saved for future learning">
+                                                                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
+                                                                    <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-tight flex items-center gap-2">
+                                                                        🟡 <span className="mt-0.5">Learned Resolution</span>
+                                                                    </span>
                                                                 </div>
-                                                            </div>
-
-                                                            {/* Auto-suggestion for low confidence */}
-                                                            {msg.confidence < 70 && !msg.escalated && (
-                                                                <div className="mt-3 py-2 px-3 bg-rose-500/10 rounded-lg border border-rose-500/20 flex items-center gap-2">
-                                                                    <AlertCircle className="w-3 h-3 text-rose-500" />
-                                                                    <span className="text-[11px] text-rose-600 font-medium italic">Confidence is low. Escalation recommended for accuracy.</span>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full group cursor-help" title="Real-time AI response (not yet in database)">
+                                                                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.8)]" />
+                                                                    <span className="text-[11px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-tight flex items-center gap-2">
+                                                                        🔴 <span className="mt-0.5">AI API Response</span>
+                                                                    </span>
                                                                 </div>
                                                             )}
-                                                        </motion.div>
+
+                                                            {msg.confidence && (
+                                                                <div className={`px-2 py-1 rounded-lg text-[11px] font-bold ${msg.confidence >= 85 ? 'text-emerald-500' :
+                                                                    msg.confidence >= 70 ? 'text-amber-500' :
+                                                                        'text-rose-500'
+                                                                    }`}>
+                                                                    {Math.round(msg.confidence)}% Reliability
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2">
+                                                            {!msg.escalated ? (
+                                                                <button
+                                                                    onClick={() => handleEscalate(msg.doubtId, msg.id)}
+                                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all text-[11px] font-bold border ${msg.confidence >= 85 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500 hover:text-white' :
+                                                                        msg.confidence >= 70 ? 'bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500 hover:text-white' :
+                                                                            'bg-rose-500/10 text-rose-600 border-rose-500/20 hover:bg-rose-500 hover:text-white font-black animate-pulse'
+                                                                        }`}
+                                                                    title={msg.confidence < 70 ? "Low reliability - Highly recommended to escalate" : "Need more help? Escalate to your mentor"}
+                                                                >
+                                                                    <ArrowUpRight className="w-3.5 h-3.5" />
+                                                                    <span>{msg.confidence < 70 ? "Escalate to Mentor" : "Escalate"}</span>
+                                                                </button>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 rounded-full text-[11px] font-bold border border-emerald-500/20">
+                                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                    <span>Escalated</span>
+                                                                </div>
+                                                            )}
+
+                                                            <button
+                                                                onClick={() => speak(msg.content, msg.id)}
+                                                                className={`p-2 rounded-xl transition-all ${speaking === msg.id ? 'bg-primary text-white shadow-lg' : 'hover:bg-primary/10 text-primary'}`}
+                                                                title="Listen again"
+                                                            >
+                                                                <Volume2 className={`w-4 h-4 ${speaking === msg.id ? 'animate-pulse' : ''}`} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Auto-suggestion for low confidence */}
+                                                    {msg.confidence < 70 && !msg.escalated && (
+                                                        <div className="mt-3 py-2 px-3 bg-rose-500/10 rounded-lg border border-rose-500/20 flex items-center gap-2">
+                                                            <AlertCircle className="w-3 h-3 text-rose-500" />
+                                                            <span className="text-[11px] text-rose-600 font-medium italic">Confidence is low. Escalation recommended for accuracy.</span>
+                                                        </div>
                                                     )}
-                                                </div>
+                                                </motion.div>
                                             )}
-                                        </>
+                                        </div>
+                                    ) : (
+                                        <div className="py-2 px-4 bg-secondary text-foreground rounded-2xl shadow-sm border border-black/5">
+                                            {formatMessage(msg.content)}
+                                        </div>
                                     )}
                                 </div>
                             </div>
                         </div>
                     </motion.div>
                 ))}
-
-                {loading && (
-                    <div className="flex justify-start">
-                        <div className="flex gap-3 max-w-[85%] items-center">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <Bot className="w-4 h-4 text-primary" />
-                            </div>
-                            <div className="py-2 px-4 flex items-center gap-2 text-muted-foreground italic text-xs">
-                                <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                Analyzing and preparing context-aware response...
-                            </div>
+            </div>
+            {loading && (
+                <div className="flex justify-start">
+                    <div className="flex gap-3 max-w-[85%] items-center">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Bot className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="py-2 px-4 flex items-center gap-2 text-muted-foreground italic text-xs">
+                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                            Analyzing and preparing context-aware response...
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Input Area */}
             <div className="p-4 bg-card border-t border-border">

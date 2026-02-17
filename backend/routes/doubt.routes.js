@@ -98,26 +98,79 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
         const language = req.body.language || 'english';
         const userName = req.dbUser.profile?.name || 'Student';
 
-        // 2. Dynamic Video Discovery (Rule 2 & 7) - High View & Animated Focus
+        // 2. Dynamic Context-Aware Video Discovery with Semantic Search
         let suggestedVideo = null;
         try {
-            const baseQuery = selectedText || query;
+            // A. Clean up UI placeholders
+            const uiPlaceholders = [
+                /\(Visual Scan - AI Analysis\)/g,
+                /\(Video Focus - Analyzing Frame.*?\)/g,
+                /\(Image Focus - AI Vision\)/g,
+                /\(Visual Scan.*?\)/g
+            ];
+            let cleanSelectedText = (selectedText || '').trim();
+            uiPlaceholders.forEach(regex => {
+                cleanSelectedText = cleanSelectedText.replace(regex, '');
+            });
+            cleanSelectedText = cleanSelectedText.trim();
+
+            // B. Determine Primary Topic
+            let searchTopic = query;
+            const isVague = query.split(' ').length < 4 || /this|it|that|yeh|isspar|kya/i.test(query);
+
+            if (isVague) {
+                if (cleanSelectedText && cleanSelectedText.length > 5) {
+                    searchTopic = `${query} ${cleanSelectedText.substring(0, 80)}`;
+                } else if (groundingContext.transcriptSegment) {
+                    searchTopic = `${query} ${groundingContext.transcriptSegment.substring(0, 100)}`;
+                } else {
+                    searchTopic = `${query} ${contentDoc?.title || ''}`;
+                }
+            } else if (cleanSelectedText) {
+                searchTopic = `${query} ${cleanSelectedText.substring(0, 50)}`;
+            }
+
             const courseContext = contentDoc?.courseId?.name || '';
             const langSuffix = language.toLowerCase() === 'hindi' ? 'hindi explanation' : 'english tutorial';
 
-            // Query optimization for high-quality animated conceptual content (Rule 2, 6 & 7)
+            // C. Detect content type preferences for intelligent ranking
             const conceptualKeywords = ['how', 'why', 'what is', 'explain', 'concept', 'theory', 'architecture', 'protocol', 'security', 'network', 'system'];
-            const isConceptual = conceptualKeywords.some(k => baseQuery.toLowerCase().includes(k)) || baseQuery.split(' ').length < 4;
+            const codingKeywords = ['code', 'coding', 'implement', 'build', 'create', 'program', 'function', 'class', 'algorithm'];
 
-            const qualitySuffix = isConceptual ? 'animated explanation conceptual whiteboard' : 'tutorial explanation practical';
-            const videoSearchQuery = `${baseQuery} ${courseContext} ${qualitySuffix} ${langSuffix}`;
-            const searchResults = await youtubeService.searchVideos(videoSearchQuery);
+            const isConceptual = conceptualKeywords.some(k => searchTopic.toLowerCase().includes(k)) || isVague;
+            const isCoding = codingKeywords.some(k => searchTopic.toLowerCase().includes(k));
+
+            const qualitySuffix = isConceptual ? 'animated simplified explanation concept' :
+                isCoding ? 'coding tutorial implementation' :
+                    'tutorial detailed';
+
+            // D. Build optimized search query
+            const videoSearchQuery = `${searchTopic} ${courseContext} ${qualitySuffix} ${langSuffix}`.substring(0, 150);
+
+            console.log(`🔍 Semantic Video Search: "${videoSearchQuery}"`);
+            console.log(`   Context: Selected="${cleanSelectedText.substring(0, 30)}..." Transcript="${groundingContext.transcriptSegment?.substring(0, 30) || 'N/A'}..."`);
+            console.log(`   Preferences: Animated=${isConceptual}, Coding=${isCoding}`);
+
+            // E. Perform semantic search with rich context
+            const searchResults = await youtubeService.searchVideos(videoSearchQuery, {
+                userId: studentId,
+                selectedText: cleanSelectedText,
+                transcriptSegment: groundingContext.transcriptSegment || '',
+                preferAnimated: isConceptual,
+                preferCoding: isCoding,
+                language: language
+            });
 
             if (!searchResults || searchResults.length === 0) {
-                // Broad Fallback Search (Rule 5 & 10) - Ensure a video is ALWAYS found
-                console.log("⚠️ No specific videos found, trying broad fallback...");
-                const fallbackQuery = `${courseContext} ${langSuffix === 'hindi explanation' ? 'hindi' : ''} educational overview tutorial`;
-                const fallbackResults = await youtubeService.searchVideos(fallbackQuery);
+                // Fallback with simpler query
+                const fallbackQuery = `${searchTopic || contentDoc?.title} educational ${langSuffix}`;
+                console.log(`⚠️ No results, trying fallback: "${fallbackQuery}"`);
+
+                const fallbackResults = await youtubeService.searchVideos(fallbackQuery, {
+                    userId: studentId,
+                    language: language
+                });
+
                 if (fallbackResults && fallbackResults.length > 0) {
                     const freshVideo = fallbackResults[0];
                     suggestedVideo = {
@@ -130,13 +183,12 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
                     };
                 }
             } else {
+                // F. Select unique video (avoid recently shown videos)
                 const lastDoubts = await Doubt.find({ studentId })
                     .sort({ createdAt: -1 })
                     .limit(5)
                     .select('suggestedVideo.id');
                 const usedVideoIds = lastDoubts.map(d => d.suggestedVideo?.id).filter(id => id);
-
-                // searchVideos is already sorted by views in the service
                 const freshVideo = searchResults.find(v => !usedVideoIds.includes(v.id)) || searchResults[0];
 
                 if (freshVideo) {
@@ -146,21 +198,17 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
                         title: freshVideo.title,
                         thumbnail: freshVideo.thumbnail,
                         views: freshVideo.views,
-                        searchQuery: videoSearchQuery // Expose the query used
+                        searchQuery: videoSearchQuery,
+                        semanticScore: freshVideo.semanticScore,
+                        finalScore: freshVideo.finalScore
                     };
+
+                    console.log(`✅ Selected: "${freshVideo.title}" (Views: ${freshVideo.views.toLocaleString()}, Semantic: ${(freshVideo.semanticScore * 100).toFixed(1)}%)`);
                 }
             }
         } catch (err) {
-            console.warn('Video discovery failed, using default fallback:', err.message);
-            // Absolute fallback to ensure "Show Youtube video for each query"
-            suggestedVideo = {
-                id: 'dQw4w9WgXcQ', // Placeholder or a generic educational channel video would be better
-                url: 'https://youtube.com/watch?v=dQw4w9WgXcQ',
-                title: 'Educational Overview',
-                thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-                views: 0,
-                searchQuery: 'default fallback'
-            };
+            console.warn('Video discovery failed:', err.message);
+            suggestedVideo = null; // No fallback video
         }
 
         if (kgResult && kgResult.confidence >= 70) {

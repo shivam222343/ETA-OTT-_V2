@@ -45,6 +45,57 @@ def get_embeddings(request: EmbeddingRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+# YouTube Semantic Search
+from youtube_semantic_search import search_videos as semantic_search_videos
+
+class VideoSearchRequest(BaseModel):
+    query: str
+    selected_text: Optional[str] = ''
+    transcript_segment: Optional[str] = ''
+    prefer_animated: Optional[bool] = True
+    prefer_coding: Optional[bool] = False
+    max_duration_minutes: Optional[int] = 10
+    language: Optional[str] = 'english'
+
+@app.post("/search-videos")
+def search_youtube_videos(request: VideoSearchRequest):
+    """
+    Advanced semantic YouTube search with intelligent ranking
+    """
+    try:
+        print(f"\n{'='*60}")
+        print(f"🎥 YouTube Semantic Search Request")
+        print(f"   Query: {request.query}")
+        print(f"   Context: {len(request.selected_text)} chars selected, {len(request.transcript_segment)} chars transcript")
+        print(f"   Preferences: Animated={request.prefer_animated}, Coding={request.prefer_coding}")
+        print(f"   Max Duration: {request.max_duration_minutes} min")
+        print(f"{'='*60}\n")
+        
+        videos = semantic_search_videos(
+            query=request.query,
+            selected_text=request.selected_text,
+            transcript_segment=request.transcript_segment,
+            prefer_animated=request.prefer_animated,
+            prefer_coding=request.prefer_coding,
+            max_duration_minutes=request.max_duration_minutes,
+            language=request.language
+        )
+        
+        return {
+            "success": True,
+            "count": len(videos),
+            "videos": videos
+        }
+    except Exception as e:
+        print(f"❌ Video search error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "videos": []
+        }
+
 @app.post("/extract", response_model=ExtractionResponse)
 def extract_data(request: ExtractionRequest):
     try:

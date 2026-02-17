@@ -317,19 +317,23 @@ Act as if you are pointing your finger at that box and teaching the student abou
 
         const activeModel = isVisionMode ? (process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview') : (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile');
 
+        // Advanced Language Detection & Instruction (Rule 9/11)
+        const hindiKeywords = /hindi|samajha|batao|kaise|kya|kyun|hindi|hinglish|karo|do|kaun|kab|apka|tumhara|aap|hai|hoon|tha|the|thi/i;
+        const isHindiDetected = hindiKeywords.test(query) || language.toLowerCase() === 'hindi';
+        const detectedLanguage = isHindiDetected ? 'hindi' : 'english';
+
         let languageInstruction = "";
-        if (language.toLowerCase() === 'hindi') {
+        if (detectedLanguage === 'hindi') {
             languageInstruction = `
-- **LANGUAGE**: STRICT HINGLISH ONLY (Hindi words in English script).
-- **CRITICAL**: No Devanagari characters (हिंदी नहीं).
-- **TONE**: Natural, conversational, and direct. Avoid over-formal "Shuddh Hindi".
-- **GREETING**: Professional one-line greeting using ${userName}'s name. No repetitive templates.`;
+- **LANGUAGE**: STRICT HINGLISH ONLY (Hindi words written in English script).
+- **CRITICAL**: Use Hindi vocabulary but only Latin letters. Absolutely NO Devanagari (हिंदी नहीं).
+- **TONE**: Natural, conversational, and direct "Aap" style.
+- **STYLE**: Explain complex concepts using everyday Hinglish analogies (e.g., "Jaise auto-pilot kaam karta hai...").`;
         } else {
             languageInstruction = `
-- **LANGUAGE**: FULL ENGLISH ONLY.
-- **CRITICAL**: No Hinglish mixing. No "samajh aaya?".
-- **TONE**: Professional academic mentor.
-- **GREETING**: Professional one-line greeting using ${userName}'s name. No repetitive templates.`;
+- **LANGUAGE**: FULL PROFESSIONAL ENGLISH ONLY.
+- **CRITICAL**: No Hinglish mixing or "smjha?".
+- **TONE**: Senior Academic Mentor. Precise and technical.`;
         }
 
         const isStrictRegion = context.startsWith('STRICT_REGION_CONTEXT:');

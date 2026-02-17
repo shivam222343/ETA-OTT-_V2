@@ -1,34 +1,79 @@
-import yts from 'yt-search';
+import axios from 'axios';
 import User from '../models/User.model.js';
 import Course from '../models/Course.model.js';
 import Content from '../models/Content.model.js';
 
 /**
- * Search for YouTube videos with educational focus
- * @param {string} query - Search term
- * @param {string} userId - User ID to save search history
- * @returns {Promise<Array>} List of videos
+ * Advanced YouTube search using Python ML service with semantic embeddings
+ * @param {string} query - Search term with context
+ * @param {Object} options - Search options
+ * @returns {Promise<Array>} Ranked list of videos
  */
-export const searchVideos = async (query, userId = null) => {
+export const searchVideos = async (query, options = {}) => {
+    const {
+        userId = null,
+        selectedText = '',
+        transcriptSegment = '',
+        preferAnimated = false,
+        preferCoding = false,
+        language = 'english'
+    } = options;
+
     try {
-        const r = await yts(query);
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`🎥 YouTube Semantic Search (Python ML Service)`);
+        console.log(`   Query: "${query}"`);
+        console.log(`   Context: Selected=${selectedText.length} chars, Transcript=${transcriptSegment.length} chars`);
+        console.log(`   Preferences: Animated=${preferAnimated}, Coding=${preferCoding}`);
+        console.log(`${'='.repeat(60)}\n`);
 
-        // Filter and sort by views to ensure high-engagement content (Rule 7)
-        const videos = r.videos.slice(0, 30)
-            .sort((a, b) => b.views - a.views)
-            .map(v => ({
-                id: v.videoId,
-                url: v.url,
-                title: v.title,
-                description: v.description,
-                thumbnail: v.thumbnail,
-                duration: v.timestamp,
-                views: v.views,
-                ago: v.ago,
-                author: v.author.name
-            }));
+        // Call Python ML service for advanced semantic search
+        const response = await axios.post('http://localhost:8000/search-videos', {
+            query: query.substring(0, 200),
+            selected_text: selectedText.substring(0, 500),
+            transcript_segment: transcriptSegment.substring(0, 500),
+            prefer_animated: preferAnimated,
+            prefer_coding: preferCoding,
+            max_duration_minutes: 10,  // Strict 10-minute limit
+            language: language
+        }, {
+            timeout: 30000  // 30 second timeout
+        });
 
-        // Save to search history if userId is provided
+        if (!response.data.success || !response.data.videos || response.data.videos.length === 0) {
+            console.warn('⚠️ ML service returned no videos, using fallback...');
+            return fallbackSearch(query, userId);
+        }
+
+        const videos = response.data.videos.map(v => ({
+            id: v.id,
+            url: v.url,
+            title: v.title,
+            description: v.description,
+            thumbnail: v.thumbnail,
+            duration: v.duration,
+            durationMinutes: v.duration_minutes,
+            views: v.views,
+            ago: calculateAgo(v.published_at),
+            author: v.channel,
+            // Scoring metadata
+            semanticScore: v.semantic_score,
+            finalScore: v.final_score,
+            isAnimated: v.is_animated,
+            isCoding: v.is_coding,
+            scores: v.scores
+        }));
+
+        console.log(`✅ ML Service returned ${videos.length} videos`);
+        if (videos.length > 0) {
+            const best = videos[0];
+            console.log(`   Top: "${best.title.substring(0, 60)}..."`);
+            console.log(`   Duration: ${best.durationMinutes.toFixed(1)} min | Views: ${best.views.toLocaleString()}`);
+            console.log(`   Semantic: ${(best.semanticScore * 100).toFixed(1)}% | Final: ${(best.finalScore * 100).toFixed(1)}%`);
+            console.log(`   Animated: ${best.isAnimated} | Coding: ${best.isCoding}\n`);
+        }
+
+        // Save to search history
         if (userId && query) {
             await User.findByIdAndUpdate(userId, {
                 $push: {
@@ -37,16 +82,114 @@ export const searchVideos = async (query, userId = null) => {
                             term: query,
                             timestamp: new Date()
                         }],
-                        $slice: -20 // Keep only last 20 searches
+                        $slice: -20
                     }
                 }
-            });
+            }).catch(err => console.warn('Failed to save search history:', err.message));
+        }
+
+        return videos;
+
+    } catch (error) {
+        console.error('❌ ML Service error:', error.message);
+        console.log('   Falling back to basic search...\n');
+        return fallbackSearch(query, userId);
+    }
+};
+
+/**
+ * Fallback search using yt-search (when ML service is unavailable)
+ */
+const fallbackSearch = async (query, userId = null) => {
+    try {
+        const yts = (await import('yt-search')).default;
+        const r = await yts(query);
+
+        const videos = r.videos.slice(0, 15)
+            .filter(v => {
+                // Filter for videos under 10 minutes
+                const duration = parseDurationToMinutes(v.timestamp);
+                return duration <= 10 && duration >= 2;
+            })
+            .sort((a, b) => b.views - a.views)
+            .map(v => ({
+                id: v.videoId,
+                url: v.url,
+                title: v.title,
+                description: v.description,
+                thumbnail: v.thumbnail,
+                duration: v.timestamp,
+                durationMinutes: parseDurationToMinutes(v.timestamp),
+                views: v.views,
+                ago: v.ago,
+                author: v.author.name,
+                semanticScore: 0.5,
+                finalScore: 0.5
+            }));
+
+        console.log(`✅ Fallback search returned ${videos.length} videos (filtered to ≤10 min)`);
+
+        // Save to search history
+        if (userId && query) {
+            await User.findByIdAndUpdate(userId, {
+                $push: {
+                    searchHistory: {
+                        $each: [{
+                            term: query,
+                            timestamp: new Date()
+                        }],
+                        $slice: -20
+                    }
+                }
+            }).catch(err => console.warn('Failed to save search history:', err.message));
         }
 
         return videos;
     } catch (error) {
-        console.error('YouTube search error:', error);
-        throw error;
+        console.error('Fallback search also failed:', error);
+        return [];
+    }
+};
+
+/**
+ * Parse duration string to minutes
+ */
+const parseDurationToMinutes = (timestamp) => {
+    if (!timestamp) return 10;
+
+    const parts = timestamp.split(':').map(p => parseInt(p));
+
+    if (parts.length === 3) {
+        // HH:MM:SS
+        return parts[0] * 60 + parts[1] + parts[2] / 60;
+    } else if (parts.length === 2) {
+        // MM:SS
+        return parts[0] + parts[1] / 60;
+    }
+
+    return 10;
+};
+
+/**
+ * Calculate "X ago" string from ISO date
+ */
+const calculateAgo = (publishedAt) => {
+    if (!publishedAt) return 'Unknown';
+
+    try {
+        const pubDate = new Date(publishedAt);
+        const now = new Date();
+        const diffMs = now - pubDate;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 1) return 'Today';
+        if (diffDays === 1) return '1 day ago';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+        if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+        return `${Math.floor(diffDays / 365)} years ago`;
+    } catch {
+        return 'Unknown';
     }
 };
 
@@ -95,19 +238,8 @@ export const getRecommendedVideos = async (userId) => {
 
         console.log(`🔍 Generating recommendations with query: ${recommendationQuery}`);
 
-        const r = await yts(recommendationQuery);
-
-        return r.videos.slice(0, 18).map(v => ({
-            id: v.videoId,
-            url: v.url,
-            title: v.title,
-            description: v.description,
-            thumbnail: v.thumbnail,
-            duration: v.timestamp,
-            views: v.views,
-            ago: v.ago,
-            author: v.author.name
-        }));
+        const videos = await searchVideos(recommendationQuery, { userId });
+        return videos.slice(0, 18);
     } catch (error) {
         console.error('YouTube recommendation error:', error);
         throw error;
