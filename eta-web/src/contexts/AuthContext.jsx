@@ -157,6 +157,26 @@ export function AuthProvider({ children }) {
         }
     };
 
+    const updateProfile = async (profileData) => {
+        try {
+            const isFormData = profileData instanceof FormData;
+            const response = await apiClient.put('/auth/profile', profileData, {
+                headers: {
+                    'Content-Type': isFormData ? 'multipart/form-data' : 'application/json'
+                }
+            });
+
+            const { user: updatedUser } = response.data.data;
+            setUser(updatedUser);
+            toast.success('Profile updated successfully!');
+            return updatedUser;
+        } catch (error) {
+            console.error('Update profile error:', error);
+            toast.error(error.response?.data?.message || 'Failed to update profile');
+            throw error;
+        }
+    };
+
     const value = {
         user,
         firebaseUser,
@@ -164,7 +184,9 @@ export function AuthProvider({ children }) {
         signup,
         login,
         loginWithGoogle,
-        logout
+        logout,
+        updateProfile,
+        updateUser: setUser
     };
 
     return (

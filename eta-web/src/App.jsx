@@ -47,14 +47,23 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            {user?.role === 'student' && <StudentDashboard />}
-            {user?.role === 'faculty' && <FacultyDashboard />}
+            {user?.role === 'student' && <Navigate to="/student/dashboard" replace />}
+            {user?.role === 'faculty' && <Navigate to="/faculty/dashboard" replace />}
             {user?.role === 'admin' && <AdminDashboard />}
           </ProtectedRoute>
         }
       />
 
       {/* Student Routes */}
+      <Route
+        path="/student/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <StudentDashboard />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/student/branch/:branchId"
         element={

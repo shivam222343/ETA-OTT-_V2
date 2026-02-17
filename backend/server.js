@@ -10,7 +10,7 @@ import { Server } from 'socket.io';
 // Import configurations
 import { connectMongoDB } from './config/mongo.config.js';
 import { connectRedis } from './config/redis.config.js';
-import { connectNeo4j } from './config/neo4j.config.js';
+import { connectNeo4j, initializeGraphSchema } from './config/neo4j.config.js';
 import { initQdrant } from './config/qdrant.config.js';
 
 // Import middleware
@@ -25,6 +25,7 @@ import contentRoutes from './routes/content.routes.js';
 import doubtRoutes from './routes/doubt.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import aiUtilityRoutes from './routes/ai.routes.js';
+import youtubeRoutes from './routes/youtube.routes.js';
 
 // Import WebSocket service
 import { initializeWebSocket } from './services/websocket.service.js';
@@ -84,6 +85,7 @@ app.use('/api/content', contentRoutes);
 app.use('/api/doubts', doubtRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiUtilityRoutes);
+app.use('/api/youtube', youtubeRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
@@ -98,6 +100,7 @@ async function startServer() {
         await connectMongoDB();
         await connectRedis();
         await connectNeo4j();
+        await initializeGraphSchema();
         await initQdrant();
 
         // Initialize WebSocket

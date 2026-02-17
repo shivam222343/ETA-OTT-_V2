@@ -78,6 +78,24 @@ const doubtSchema = new mongoose.Schema({
         y: Number,
         width: Number,
         height: Number
+    },
+    suggestedVideo: {
+        id: String,
+        url: String,
+        title: String,
+        thumbnail: String
+    },
+    confidenceBreakdown: {
+        type: Object,
+        default: null
+    },
+    isFromCache: {
+        type: Boolean,
+        default: false
+    },
+    source: {
+        type: String,
+        default: 'AI_API' // 'KNOWLEDGE_GRAPH' or 'AI_API'
     }
 }, {
     timestamps: true

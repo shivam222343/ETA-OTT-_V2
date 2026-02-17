@@ -32,7 +32,7 @@ export default function BranchResources() {
                 apiClient.get(`/courses/branch/${branchId}`)
             ]);
             setBranch(branchRes.data.data.branch);
-            setCourses(coursesRes.data.data.courses || []);
+            setCourses((coursesRes.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
         } catch (error) {
             console.error('Fetch branch resources error:', error);
             setError(true);

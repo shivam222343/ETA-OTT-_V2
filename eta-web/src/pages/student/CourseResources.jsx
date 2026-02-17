@@ -196,7 +196,7 @@ export default function CourseResources() {
                                     const Icon = getIcon(content.type);
                                     return (
                                         <motion.div
-                                            key={content._id}
+                                            key={`${content._id || 'content'}-${idx}`}
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: idx * 0.03 }}
@@ -209,6 +209,11 @@ export default function CourseResources() {
                                                         src={content.file.thumbnail.url}
                                                         alt={content.title}
                                                         className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                                        onError={(e) => {
+                                                            e.target.onerror = null;
+                                                            e.target.src = ''; // Clear broken src
+                                                            e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-secondary/30"><div class="text-[8px] font-bold text-muted-foreground uppercase opacity-40">No Preview</div></div>';
+                                                        }}
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center">
@@ -327,25 +332,34 @@ export default function CourseResources() {
             </div>
 
             {/* Content Viewer Modal */}
-            <AnimatePresence>
+            {/* Modal Layer */}
+            <AnimatePresence mode="wait">
                 {selectedContent && (
-                    <div className="fixed inset-0 z-[100] bg-background">
+                    <motion.div
+                        key="content-viewer-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-background"
+                    >
                         <ContentViewer
                             isOpen={!!selectedContent}
                             content={selectedContent}
                             onClose={() => setSelectedContent(null)}
                         />
-                    </div>
+                    </motion.div>
                 )}
-                {/* Extracted Info Modal */}
-                <ExtractedInfoModal
-                    isOpen={showInfoModal}
-                    onClose={() => {
-                        setShowInfoModal(false);
-                        setInfoContent(null);
-                    }}
-                    content={infoContent}
-                />
+                {showInfoModal && (
+                    <ExtractedInfoModal
+                        key="info-modal-overlay"
+                        isOpen={showInfoModal}
+                        onClose={() => {
+                            setShowInfoModal(false);
+                            setInfoContent(null);
+                        }}
+                        content={infoContent}
+                    />
+                )}
             </AnimatePresence>
         </div>
     );

@@ -3,17 +3,31 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Download, Share2, Maximize2, Minimize2,
     FileText, Video, Info, BarChart3, List, MessageCircle,
+<<<<<<< HEAD
     ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe
+=======
+    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock
+>>>>>>> upstream/main
 } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import { Document, Page, pdfjs } from 'react-pdf';
 import toast from 'react-hot-toast';
+<<<<<<< HEAD
 import AITutor from '../AITutor';
 import Loader from '../Loader';
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
 
+=======
+import apiClient from '../../api/axios.config';
+import { useSocket } from '../../hooks/useSocket';
+import AITutor from '../AITutor';
+import Loader from '../Loader';
+import ThemeToggle from '../ThemeToggle';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
+>>>>>>> upstream/main
 
 // Set worker for react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -39,6 +53,175 @@ export default function ContentViewer({ isOpen, onClose, content }) {
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const viewerRef = useRef(null);
     const playerRef = useRef(null);
+<<<<<<< HEAD
+=======
+    const [localContent, setLocalContent] = useState(content);
+    const [estimatedTime, setEstimatedTime] = useState(0);
+    const [aiSidebarWidth, setAISidebarWidth] = useState(400); // Default width
+    const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+    const socket = useSocket();
+
+    // Sync local content with prop
+    useEffect(() => {
+        setLocalContent(content);
+    }, [content?._id]);
+
+    // WebSocket Real-time Updates
+    useEffect(() => {
+        if (!socket || !localContent) return;
+
+        const courseId = localContent.courseId?._id || localContent.courseId;
+        if (courseId) {
+            socket.emit('join:course', courseId);
+            console.log(`📡 Joined course room for real-time updates: ${courseId}`);
+        }
+
+        const handleProcessing = (data) => {
+            if (data.contentId === localContent._id) {
+                console.log('🔄 Progress update:', data);
+                setLocalContent(prev => ({
+                    ...prev,
+                    processingProgress: data.progress,
+                    processingStatus: data.status
+                }));
+            }
+        };
+
+        const handleCompleted = (data) => {
+            if (data.contentId === localContent._id) {
+                console.log('✅ Extraction completed!');
+                setLocalContent(data.content);
+            }
+        };
+
+        const handleFailed = (data) => {
+            if (data.contentId === localContent._id) {
+                console.log('❌ Extraction failed:', data.error);
+                setLocalContent(prev => ({
+                    ...prev,
+                    processingStatus: 'failed',
+                    processingError: data.error
+                }));
+            }
+        };
+
+        socket.on('content:processing', handleProcessing);
+        socket.on('content:completed', handleCompleted);
+        socket.on('content:failed', handleFailed);
+
+        return () => {
+            socket.off('content:processing', handleProcessing);
+            socket.off('content:completed', handleCompleted);
+            socket.off('content:failed', handleFailed);
+        };
+    }, [socket, localContent?._id]);
+
+    // Polling for updates if not completed/failed
+    const restartTriggeredRef = useRef(false);
+
+    useEffect(() => {
+        // Automatic extraction restart if opened again and was previously failed/cancelled
+        const autoRestart = async () => {
+            if (localContent?.processingStatus === 'failed' && !restartTriggeredRef.current) {
+                console.log('♻️ Content was failed/cancelled - Auto-restarting extraction...');
+                restartTriggeredRef.current = true;
+                try {
+                    const response = await apiClient.post(`/content/${localContent._id}/reprocess`);
+                    if (response.data.success) {
+                        // Refresh local content to 'pending' state to start polling
+                        const updated = await apiClient.get(`/content/${localContent._id}`);
+                        if (updated.data.success) {
+                            setLocalContent(updated.data.data.content);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to auto-restart processing:', error);
+                }
+            }
+        };
+
+        autoRestart();
+
+        let pollInterval;
+        if (localContent && (localContent.processingStatus === 'pending' || localContent.processingStatus === 'processing')) {
+            pollInterval = setInterval(async () => {
+                try {
+                    const response = await apiClient.get(`/content/${localContent._id}`);
+                    if (response.data.success) {
+                        setLocalContent(response.data.data.content);
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 5000);
+        }
+        return () => clearInterval(pollInterval);
+    }, [localContent?._id, localContent?.processingStatus]);
+
+    // AI Processing Countdown logic
+    useEffect(() => {
+        if (localContent?.processingStatus === 'pending' || localContent?.processingStatus === 'processing') {
+            if (estimatedTime === 0) {
+                // Initial estimate: roughly 8% of duration + 15s base overhead
+                const duration = localContent.file?.duration || 120;
+                const progress = localContent.processingProgress || 0;
+                const remainingRatio = Math.max(0.1, (100 - progress) / 100);
+                const initialEst = Math.ceil((duration * 0.08 + 15) * remainingRatio);
+                setEstimatedTime(initialEst);
+            }
+        } else {
+            setEstimatedTime(0);
+        }
+    }, [localContent?.processingStatus, localContent?._id]);
+
+    // Track processing status in ref to handle cancellation on unmount correctly
+    const processingStatusRef = useRef(localContent?.processingStatus);
+    useEffect(() => {
+        processingStatusRef.current = localContent?.processingStatus;
+    }, [localContent?.processingStatus]);
+
+    // Handle cancellation on unmount
+    useEffect(() => {
+        return () => {
+            if (processingStatusRef.current === 'pending' || processingStatusRef.current === 'processing') {
+                console.log('⏹️ Closing viewer - terminating background extraction...');
+                apiClient.patch(`/content/${localContent._id}/cancel-processing`).catch(err => {
+                    console.error('Failed to cancel processing on unmount:', err);
+                });
+            }
+        };
+    }, [localContent?._id]);
+
+    useEffect(() => {
+        let timer;
+        if ((localContent?.processingStatus === 'pending' || localContent?.processingStatus === 'processing') && estimatedTime > 0) {
+            timer = setInterval(() => {
+                setEstimatedTime(prev => (prev > 0 ? prev - 1 : 0));
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [localContent?.processingStatus, estimatedTime > 0]);
+
+    // Resize Event Handler for AI Sidebar
+    useEffect(() => {
+        const handleMouseMoveResize = (e) => {
+            if (!isResizingSidebar) return;
+            // Adjustment for right tabs (64px)
+            const newWidth = window.innerWidth - e.clientX - 64;
+            setAISidebarWidth(Math.min(Math.max(300, newWidth), 800));
+        };
+        const handleMouseUpResize = () => setIsResizingSidebar(false);
+
+        if (isResizingSidebar) {
+            window.addEventListener('mousemove', handleMouseMoveResize);
+            window.addEventListener('mouseup', handleMouseUpResize);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMoveResize);
+            window.removeEventListener('mouseup', handleMouseUpResize);
+        };
+    }, [isResizingSidebar]);
+>>>>>>> upstream/main
 
     const pdfFile = useMemo(() => {
         if (!content?.file?.url) return null;
@@ -50,7 +233,11 @@ export default function ContentViewer({ isOpen, onClose, content }) {
 
         if (isCloudinary) {
             return {
+<<<<<<< HEAD
                 url: `${import.meta.env.VITE_API_URL || '/api'}/content/view/proxy?url=${encodeURIComponent(content.file.url)}`,
+=======
+                url: `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/content/view/proxy?url=${encodeURIComponent(content.file.url)}`,
+>>>>>>> upstream/main
                 httpHeaders: {
                     Authorization: `Bearer ${localStorage.getItem('token')}`
                 }
@@ -60,7 +247,11 @@ export default function ContentViewer({ isOpen, onClose, content }) {
         return content.file.url;
     }, [content?.file?.url, content?.type, content?.file?.format]);
 
+<<<<<<< HEAD
     if (!isOpen || !content) return null;
+=======
+    if (!isOpen || !content || !localContent) return null;
+>>>>>>> upstream/main
 
     function onDocumentLoadSuccess({ numPages }) {
         setNumPages(numPages);
@@ -275,6 +466,10 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                             controls={!isSelectionMode}
                             width="100%"
                             height="100%"
+<<<<<<< HEAD
+=======
+                            style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%' }}
+>>>>>>> upstream/main
                             playing={!isSelectionMode}
                             light={content.type === 'video' && content.file?.thumbnail?.url ? content.file.thumbnail.url : false}
                             playIcon={
@@ -597,10 +792,45 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                             {content.type === 'video' ? <Video className="w-5 h-5 text-primary" /> : <FileText className="w-5 h-5 text-primary" />}
                         </div>
                         <div className="min-w-0">
+<<<<<<< HEAD
                             <h2 className="text-lg font-bold truncate">{content.title}</h2>
                             <p className="text-xs text-muted-foreground capitalize">
                                 {content.metadata?.category || content.type} • {content.metadata?.difficulty}
                             </p>
+=======
+                            <h2 className="text-lg font-bold truncate">{localContent?.title || 'Loading Content...'}</h2>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-muted-foreground capitalize">
+                                    {localContent?.metadata?.category || localContent?.type || 'General'} • {localContent?.metadata?.difficulty || 'Standard'}
+                                </p>
+                                {localContent.processingStatus && (
+                                    <>
+                                        <span className="text-muted-foreground/30 text-[10px]">•</span>
+                                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${localContent.processingStatus === 'completed'
+                                            ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                                            : localContent.processingStatus === 'failed'
+                                                ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                                                : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 animate-pulse'
+                                            }`}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${localContent.processingStatus === 'completed'
+                                                ? 'bg-green-500'
+                                                : localContent.processingStatus === 'failed'
+                                                    ? 'bg-red-500'
+                                                    : 'bg-yellow-500'
+                                                }`} />
+                                            {localContent.processingStatus === 'completed' ? 'AI Ready' :
+                                                localContent.processingStatus === 'failed' ? 'AI Failed' : 'AI Processing'}
+                                        </div>
+                                        {(localContent.processingStatus === 'processing' || localContent.processingStatus === 'pending') && (
+                                            <span className="text-[10px] font-bold text-primary animate-pulse flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                {estimatedTime > 0 ? `~${estimatedTime}s` : 'Ready Soon'}
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+>>>>>>> upstream/main
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -649,6 +879,11 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                             </div>
                         )}
                         <div className="w-px h-6 bg-border mx-2" />
+<<<<<<< HEAD
+=======
+                        <ThemeToggle />
+                        <div className="w-px h-6 bg-border mx-2" />
+>>>>>>> upstream/main
                         <button
                             onClick={toggleFullScreen}
                             className="p-2 hover:bg-secondary rounded-lg transition-colors"
@@ -781,8 +1016,33 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                     {/* AI Tutor Sidebar */}
                     <AnimatePresence>
                         {isAISidebarOpen && (
+<<<<<<< HEAD
                             <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 400, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="border-l bg-card flex flex-col h-full border-border/50 shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] overflow-hidden z-40">
                                 <AITutor courseId={content.courseId} contentId={content._id} selectedText={selection} visualContext={selectionBox} />
+=======
+                            <motion.div
+                                initial={{ width: 0, opacity: 0 }}
+                                animate={{ width: aiSidebarWidth, opacity: 1 }}
+                                exit={{ width: 0, opacity: 0 }}
+                                className="border-l bg-card flex flex-col h-full border-border/50 shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] overflow-hidden z-40 relative group/sidebar"
+                            >
+                                {/* Resize Handle */}
+                                <div
+                                    className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-primary/30 transition-colors z-50"
+                                    onMouseDown={(e) => {
+                                        setIsResizingSidebar(true);
+                                        e.preventDefault();
+                                    }}
+                                />
+                                <AITutor
+                                    courseId={content.courseId}
+                                    contentId={content._id}
+                                    contentTitle={content.title}
+                                    selectedText={selection}
+                                    visualContext={selectionBox}
+                                    isParentActive={activeTab === 'viewer'}
+                                />
+>>>>>>> upstream/main
                             </motion.div>
                         )}
                     </AnimatePresence>

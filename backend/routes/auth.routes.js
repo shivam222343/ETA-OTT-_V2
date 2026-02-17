@@ -3,6 +3,9 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.model.js';
 import { verifyFirebaseToken } from '../config/firebase.config.js';
 
+import { authenticate, attachUser } from '../middleware/auth.middleware.js';
+import upload from '../services/upload.service.js';
+
 const router = express.Router();
 
 // Signup
@@ -117,7 +120,7 @@ router.post('/verify-token', async (req, res) => {
         const { token } = req.body;
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.userId).select('-__v');
+        const user = await User.findById(decoded.userId).select('-__v +groqApiKey');
 
         if (!user) {
             return res.status(404).json({
@@ -148,7 +151,7 @@ router.get('/profile', async (req, res) => {
 
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.userId).select('-__v');
+        const user = await User.findById(decoded.userId).select('-__v +groqApiKey');
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
@@ -162,6 +165,80 @@ router.get('/profile', async (req, res) => {
         res.status(401).json({
             success: false,
             message: 'Invalid token'
+        });
+    }
+});
+
+// Update profile
+router.put('/profile', authenticate, attachUser, upload.fields([
+    { name: 'avatar', maxCount: 1 },
+    { name: 'banner', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const {
+            name, bio, phone, avatarUrl,
+            department, designation, specialization,
+            semester, prnNumber, interests
+        } = req.body;
+        const user = await User.findById(req.dbUser._id);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        // Basic profile fields
+        if (name) user.profile.name = name;
+        if (bio !== undefined) user.profile.bio = bio;
+        if (phone !== undefined) user.profile.phone = phone;
+
+        // Faculty-specific fields
+        if (department !== undefined) user.profile.department = department;
+        if (designation !== undefined) user.profile.designation = designation;
+        if (specialization !== undefined) user.profile.specialization = specialization;
+
+        // Student-specific fields
+        if (semester !== undefined) user.profile.semester = semester;
+        if (prnNumber !== undefined) user.profile.prnNumber = prnNumber;
+        if (interests !== undefined) user.profile.interests = interests;
+
+        // Handle avatar upload
+        if (req.files && req.files.avatar && req.files.avatar[0]) {
+            user.profile.avatar = req.files.avatar[0].path;
+        } else if (avatarUrl) {
+            // If avatar URL provided (e.g., from DiceBear)
+            user.profile.avatar = avatarUrl;
+        }
+
+        // Handle banner upload
+        if (req.files && req.files.banner && req.files.banner[0]) {
+            user.profile.banner = req.files.banner[0].path;
+        }
+
+        await user.save();
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: {
+                user: {
+                    id: user._id,
+                    email: user.email,
+                    role: user.role,
+                    profile: user.profile,
+                    institutionIds: user.institutionIds,
+                    branchIds: user.branchIds,
+                    groqApiKey: user.groqApiKey,
+                    aiOnboarding: user.aiOnboarding,
+                    createdAt: user.createdAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update profile',
+            error: error.message
         });
     }
 });

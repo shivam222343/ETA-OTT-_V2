@@ -30,11 +30,41 @@ const userSchema = new mongoose.Schema({
             type: String,
             default: null
         },
+        banner: {
+            type: String,
+            default: null
+        },
         bio: {
             type: String,
             default: ''
         },
         phone: {
+            type: String,
+            default: null
+        },
+        // Faculty-specific fields
+        department: {
+            type: String,
+            default: null
+        },
+        designation: {
+            type: String,
+            default: null
+        },
+        specialization: {
+            type: String,
+            default: null
+        },
+        // Student-specific fields
+        semester: {
+            type: String,
+            default: null
+        },
+        prnNumber: {
+            type: String,
+            default: null
+        },
+        interests: {
             type: String,
             default: null
         }
@@ -78,6 +108,32 @@ const userSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
+    },
+    searchHistory: [{
+        term: String,
+        timestamp: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+    groqApiKey: {
+        type: String,
+        default: null,
+        select: false // Hide by default for security
+    },
+    aiOnboarding: {
+        lastModalShown: {
+            type: Date,
+            default: null
+        },
+        interactionCount: {
+            type: Number,
+            default: 0
+        },
+        skipCount: {
+            type: Number,
+            default: 0
+        }
     }
 }, {
     timestamps: true

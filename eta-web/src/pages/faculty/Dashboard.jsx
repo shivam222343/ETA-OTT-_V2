@@ -21,7 +21,8 @@ import {
     Plus,
     Key,
     Video,
-    Trash2
+    Trash2,
+    User
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
@@ -31,6 +32,8 @@ import InstitutionCard from '../../components/faculty/InstitutionCard';
 import FacultyDoubtManager from '../../components/faculty/FacultyDoubtManager';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
+
+import ProfileSection from '../../components/ProfileSection';
 
 export default function FacultyDashboard() {
     const { user, logout } = useAuth();
@@ -53,7 +56,7 @@ export default function FacultyDashboard() {
         { id: 'content', label: 'Content', icon: Upload },
         { id: 'doubts', label: 'Doubts', icon: MessageSquare },
         { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'profile', label: 'Profile', icon: User },
     ];
 
     const stats = [
@@ -78,8 +81,8 @@ export default function FacultyDashboard() {
             ]);
 
             setInstitutions(instRes.data.data.institutions || []);
-            setCourses(courseRes.data.data.courses || []);
-            setRecentContent(contentRes.data.data.recentContent || []);
+            setCourses((courseRes.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
+            setRecentContent((contentRes.data.data.recentContent || []).filter(c => c.courseId?.code !== 'YT_DISCOVERY'));
         } catch (error) {
             console.error('Fetch dashboard data error:', error);
             // Don't show toast for recent content failure if other parts work
@@ -180,10 +183,14 @@ export default function FacultyDashboard() {
                         {/* User Info */}
                         <div className="p-4 border-b">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <span className="text-primary font-semibold">
-                                        {user?.profile?.name?.charAt(0) || 'F'}
-                                    </span>
+                                <div className="w-10 h-10 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center border border-primary/20">
+                                    {user?.profile?.avatar ? (
+                                        <img src={user.profile.avatar} alt={user.profile.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-primary font-semibold">
+                                            {user?.profile?.name?.charAt(0) || 'F'}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate">{user?.profile?.name || 'Faculty'}</p>
@@ -261,6 +268,20 @@ export default function FacultyDashboard() {
                             <button className="relative p-2 hover:bg-secondary rounded-lg transition-colors">
                                 <Bell className="w-5 h-5" />
                                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                            </button>
+
+                            {/* User Avatar */}
+                            <button
+                                onClick={() => setActiveTab('profile')}
+                                className="w-10 h-10 rounded-full overflow-hidden border border-border hover:ring-2 hover:ring-primary/20 transition-all"
+                            >
+                                {user?.profile?.avatar ? (
+                                    <img src={user.profile.avatar} alt={user.profile.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                        {user?.profile?.name?.[0] || 'F'}
+                                    </div>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -578,38 +599,13 @@ export default function FacultyDashboard() {
                         </div>
                     )}
 
-                    {activeTab === 'settings' && (
-                        <div className="space-y-6">
-                            <h2 className="text-2xl font-bold">Settings</h2>
-                            <div className="card p-6">
-                                <div className="space-y-6">
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-4">Profile Settings</h3>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium mb-2">Name</label>
-                                                <input
-                                                    type="text"
-                                                    value={user?.profile?.name || ''}
-                                                    className="input w-full"
-                                                    readOnly
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium mb-2">Email</label>
-                                                <input
-                                                    type="email"
-                                                    value={user?.email || ''}
-                                                    className="input w-full"
-                                                    readOnly
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    {activeTab === 'profile' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <ProfileSection />
                         </div>
                     )}
+
+
                 </main>
             </div>
 
