@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -10,10 +10,12 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
-import ContentViewer from '../../components/faculty/ContentViewer';
-import ExtractedInfoModal from '../../components/faculty/ExtractedInfoModal';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
+
+// Lazy Loaded Components
+const ContentViewer = lazy(() => import('../../components/faculty/ContentViewer'));
+const ExtractedInfoModal = lazy(() => import('../../components/faculty/ExtractedInfoModal'));
 
 export default function CourseResources() {
     const { courseId } = useParams();
@@ -331,33 +333,37 @@ export default function CourseResources() {
                 </div>
             </div>
 
-            {/* Content Viewer Modal */}
+            {/* Content Viewer Modal/Modal Overlays */}
             <AnimatePresence mode="wait">
                 {selectedContent && (
-                    <motion.div
-                        key="content-viewer-overlay"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-background"
-                    >
-                        <ContentViewer
-                            isOpen={!!selectedContent}
-                            content={selectedContent}
-                            onClose={() => setSelectedContent(null)}
-                        />
-                    </motion.div>
+                    <Suspense fallback={<Loader />}>
+                        <motion.div
+                            key="content-viewer-overlay"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] bg-background"
+                        >
+                            <ContentViewer
+                                isOpen={!!selectedContent}
+                                content={selectedContent}
+                                onClose={() => setSelectedContent(null)}
+                            />
+                        </motion.div>
+                    </Suspense>
                 )}
                 {showInfoModal && (
-                    <ExtractedInfoModal
-                        key="info-modal-overlay"
-                        isOpen={showInfoModal}
-                        onClose={() => {
-                            setShowInfoModal(false);
-                            setInfoContent(null);
-                        }}
-                        content={infoContent}
-                    />
+                    <Suspense fallback={null}>
+                        <ExtractedInfoModal
+                            key="info-modal-overlay"
+                            isOpen={showInfoModal}
+                            onClose={() => {
+                                setShowInfoModal(false);
+                                setInfoContent(null);
+                            }}
+                            content={infoContent}
+                        />
+                    </Suspense>
                 )}
             </AnimatePresence>
         </div>

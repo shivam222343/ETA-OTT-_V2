@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Bot, User, Loader2, Volume2, Sparkles, AlertCircle, ArrowUpRight, CheckCircle2, Maximize2, Globe, Mic, MicOff, Youtube, Play, Square } from 'lucide-react';
+import { Send, Bot, User, Loader2, Volume2, Sparkles, AlertCircle, ArrowUpRight, CheckCircle2, Maximize2, Globe, Mic, MicOff, Youtube, Play, Square, Trash2 } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import apiClient from '../api/axios.config';
 import toast from 'react-hot-toast';
@@ -312,38 +312,90 @@ const parseInlineStyles = (text) => {
     });
 };
 
-const StageItem = memo(({ type, content, video, isFinal, isActive, onComplete }) => {
-    const [displayedContent, setDisplayedContent] = useState('');
-    const [isDone, setIsDone] = useState(false);
+const StageItem = memo(({ type, content, video, isFinal, isActive, isAnimate, onComplete, scrollRef }) => {
+    const [displayedContent, setDisplayedContent] = useState(isAnimate ? '' : content);
+    const [isDone, setIsDone] = useState(!isAnimate);
 
     useEffect(() => {
         if (!content) return;
 
-        // If we've already done typing for this specific content, don't repeat
-        if (displayedContent === content && isDone) return;
+        // If not a new message (typing finished or historical), show immediately
+        if (!isAnimate) {
+            setDisplayedContent(content);
+            setIsDone(true);
+            if (onComplete) onComplete();
+            return;
+        }
 
         // Reset for new content
         setDisplayedContent('');
         setIsDone(false);
 
         let currentIdx = 0;
-        const words = content.split(' ');
+        let pauseCounter = 0;
 
-        // Ultra-fast reveal: reveal 3 words at a time every 25ms
-        // This makes it feel incredibly snappy and "instant"
+        // Slightly tuned speed (45ms) for a perfectly natural reading experience
         const interval = setInterval(() => {
-            if (currentIdx < words.length) {
-                currentIdx += 3;
-                setDisplayedContent(words.slice(0, currentIdx).join(' '));
+            if (pauseCounter > 0) {
+                pauseCounter--;
+                return;
+            }
+
+            if (currentIdx < content.length) {
+                // RULE 15: Instant Code Block Reveal
+                if (content.substring(currentIdx, currentIdx + 3) === '```') {
+                    const closingIndex = content.indexOf('```', currentIdx + 3);
+                    if (closingIndex !== -1) {
+                        currentIdx = closingIndex + 3;
+                    } else {
+                        currentIdx += 1;
+                    }
+                }
+                // RULE 16: Instant Table Reveal with Dynamic Pause (Content-Aware)
+                else if (content.substring(currentIdx, currentIdx + 20).includes('|')) {
+                    const remaining = content.substring(currentIdx);
+                    const tableMatch = remaining.match(/^(\s*)\|/);
+
+                    if (tableMatch) {
+                        let tableEnd = currentIdx;
+                        let tableWords = "";
+                        const lines = remaining.split('\n');
+
+                        for (const line of lines) {
+                            if (line.trim() && !line.includes('|')) break;
+                            tableEnd += line.length + 1;
+                            if (line.includes('|')) {
+                                tableWords += line.replace(/[|#\-_]/g, ' ') + " ";
+                            }
+                        }
+
+                        currentIdx = Math.min(tableEnd, content.length);
+                        const wordCount = tableWords.split(/\s+/).filter(w => w.length > 2).length;
+                        pauseCounter = Math.max(45, Math.ceil((wordCount * 350) / 45));
+                    } else {
+                        currentIdx += 1;
+                    }
+                }
+                else {
+                    currentIdx += 1;
+                }
+                setDisplayedContent(content.substring(0, currentIdx));
             } else {
                 clearInterval(interval);
                 setIsDone(true);
                 if (onComplete) onComplete();
             }
-        }, 25);
+        }, 45);
 
         return () => clearInterval(interval);
-    }, [content]); // Only re-run when content changes
+    }, [content, isAnimate]);
+
+    // Force scroll to bottom while typing (Rule 12)
+    useEffect(() => {
+        if (isAnimate && !isDone && scrollRef?.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [displayedContent, isAnimate, isDone, scrollRef]);
 
     return (
         <motion.div
@@ -353,7 +405,7 @@ const StageItem = memo(({ type, content, video, isFinal, isActive, onComplete })
         >
             <div className="w-full overflow-hidden">
                 {formatMessage(displayedContent)}
-                {!isDone && <span className="inline-block w-1.5 h-4 bg-primary/40 ml-1 animate-pulse" />}
+                {!isDone && isAnimate && <span className="inline-block w-1.5 h-4 bg-primary/40 ml-1 animate-pulse" />}
             </div>
 
             {isFinal && isDone && video && (
@@ -396,6 +448,7 @@ const StageItem = memo(({ type, content, video, isFinal, isActive, onComplete })
 
 const SequentialFlow = ({ content, onComplete, scrollRef, speak, messageId, suggestedVideo, shouldSpeak }) => {
     const [activeStage, setActiveStage] = useState(0);
+    const hasSpokenRef = useRef(false);
 
     const stages = useMemo(() => {
         const parts = [];
@@ -455,33 +508,44 @@ const SequentialFlow = ({ content, onComplete, scrollRef, speak, messageId, sugg
     }, [content, suggestedVideo]);
 
     useEffect(() => {
-        if (shouldSpeak) {
+        // STRICT GUARD: Only speak once on initial automatic trigger
+        if (shouldSpeak && !hasSpokenRef.current) {
             speak(content, messageId);
+            hasSpokenRef.current = true;
         }
 
-        // Start first stage
-        setActiveStage(0);
-    }, [content, messageId, shouldSpeak]);
+        // If not a new message (typing finished or historical), show all stages immediately
+        if (!shouldSpeak) {
+            setActiveStage(stages.length - 1);
+        } else {
+            setActiveStage(0);
+        }
+    }, [content, messageId, shouldSpeak, speak, stages.length]);
 
     const handleStageComplete = () => {
-        if (activeStage < stages.length - 1) {
+        if (shouldSpeak && activeStage < stages.length - 1) {
             setActiveStage(prev => prev + 1);
-        } else {
+        } else if (shouldSpeak && activeStage === stages.length - 1) {
             if (onComplete) onComplete();
         }
     };
 
     // Auto-scroll as text flows
     useEffect(() => {
-        if (scrollRef.current && (shouldSpeak || activeStage > 0)) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        if (scrollRef.current) {
+            // Use requestAnimationFrame for smoother scrolling during high-frequency typing updates
+            requestAnimationFrame(() => {
+                if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                }
+            });
         }
-    }, [activeStage, shouldSpeak]);
+    }, [activeStage, shouldSpeak, stages]);
 
     return (
         <div className="space-y-4">
             {stages.map((s, i) => (
-                i <= activeStage && (
+                (i <= activeStage) && (
                     <StageItem
                         key={i}
                         type={s.type}
@@ -489,7 +553,9 @@ const SequentialFlow = ({ content, onComplete, scrollRef, speak, messageId, sugg
                         video={s.video}
                         isFinal={i === stages.length - 1}
                         isActive={shouldSpeak && i === activeStage}
+                        isAnimate={shouldSpeak}
                         onComplete={handleStageComplete}
+                        scrollRef={scrollRef}
                     />
                 )
             ))}
@@ -512,6 +578,8 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
     const [showGroqModal, setShowGroqModal] = useState(false);
     const [groqModalReason, setGroqModalReason] = useState(null);
     const [interactionCount, setInteractionCount] = useState(parseInt(localStorage.getItem('ai_interaction_count') || '0'));
+    const [contextExpanded, setContextExpanded] = useState(false);
+    const [showSelectionPreview, setShowSelectionPreview] = useState(false);
     const scrollRef = useRef(null);
     const recognitionRef = useRef(null);
     const audioRef = useRef(null);
@@ -527,25 +595,50 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
     useEffect(() => {
         if (contentId && messages.length === 0 && !welcomeAddedRef.current) {
             const welcomeKey = `ai_welcome_${contentId}`;
-            const hasShownWelcome = sessionStorage.getItem(welcomeKey);
+            const visitKey = `ai_has_visited_${contentId}`;
 
-            if (!hasShownWelcome) {
-                welcomeAddedRef.current = true;
-                const welcomeMessage = targetLanguage === 'hindi'
-                    ? `Namaste ${userName}! \n\nMain aapka AI Tutor hoon. Aap abhi **${contentTitle || 'is resource'}** dekh rahe hain.\n\n### Kaise Use Karein, \n\n1. **Pencil Tool** 📝 - Screen par kisi bhi area ko select karne ke liye pencil icon par click karein. \n2. **Area Select Karein** - Jis part ke baare mein jaanna hai, usko highlight karein. \n3. **Sawaal Poochein** - Apna doubt type karein ya voice use karein. \n\nMain aapko detailed explanation dunga with relevant examples aur videos!\n\nKoi bhi sawaal poochne ke liye ready hoon. Chaliye shuru karte hain! 🚀`
-                    : `Hello ${userName}! \n\nI'm your AI Tutor. You're currently viewing **${contentTitle || 'this resource'}**.\n\n### How to Use:\n\n1. **Pencil Tool** 📝 - Click the pencil icon to activate selection mode\n2. **Select Area** - Highlight any part of the content you want to learn about\n3. **Ask Question** - Type your question or use voice input\n\nI'll provide detailed explanations with relevant examples and video tutorials!\n\nReady to help with any questions. Let's get started! 🚀`;
+            // Allow showing welcome if messages are empty (re-opening the tutor)
+            // But track persistent visit state for message variety
+            welcomeAddedRef.current = true;
 
-                const welcomeId = 'welcome-' + Date.now();
+            const isReturning = localStorage.getItem(visitKey) === 'true';
 
-                setMessages([{
-                    role: 'assistant',
-                    content: welcomeMessage,
-                    id: welcomeId,
-                    isWelcome: true
-                }]);
+            // Randomize Greeting
+            const hindiGreetings = ["Namaste", "Pranam", "Ram Ram", "Hey"];
+            const englishGreetings = ["Hello", "Hi", "Hey there", "Greetings"];
+            const randomGreeting = targetLanguage === 'hindi'
+                ? hindiGreetings[Math.floor(Math.random() * hindiGreetings.length)]
+                : englishGreetings[Math.floor(Math.random() * englishGreetings.length)];
 
-                sessionStorage.setItem(welcomeKey, 'true');
+            const resourceName = contentTitle || 'is resource';
+
+            let welcomeMessage = "";
+            if (targetLanguage === 'hindi') {
+                if (isReturning) {
+                    welcomeMessage = `${randomGreeting} ${userName}! \n\nMain aapka AI Tutor hoon. Aap **${resourceName}** par wapas aaye hain. \n\nKya aapne pichli baar jahan chhoda tha wahan se continue karna chahenge? \n\n1. **Highlighter** 📝 - Kisi bhi part ko select karke mujhse firse samjhne ke liye pencil icon use karein. \n2. **Direct Doubt** - Aap mujhse directly type karke ya bol kar pooch sakte hain. \n\nMain aapki study ko beheter banane ke liye ready hoon! 🚀`;
+                } else {
+                    welcomeMessage = `${randomGreeting} ${userName}! \n\nMain aapka AI Tutor hoon. Aap abhi **${resourceName}** dekh rahe hain.\n\n### Kaise Use Karein, \n\n1. **Pencil Tool** 📝 - Screen par kisi bhi area ko select karne ke liye pencil icon par click karein. \n2. **Area Select Karein** - Jis part ke baare mein jaanna hai, usko highlight karein. \n3. **Sawaal Poochein** - Apna doubt type karein ya voice use karein. \n\nMain aapko detailed explanation dunga with relevant examples aur research based videos!\n\nKoi bhi sawaal poochne ke liye ready hoon. Chaliye shuru karte hain! 🚀`;
+                }
+            } else {
+                if (isReturning) {
+                    welcomeMessage = `${randomGreeting} ${userName}! \n\nI'm your AI Tutor. Welcome back to **${resourceName}**. \n\nReady to pick up where you left off? \n\n1. **Selection Tool** 📝 - Re-highlight any section for a fresh explanation.\n2. **Ask Away** - Type or speak your doubts directly.\n\nI'm here to help you master this material! 🚀`;
+                } else {
+                    welcomeMessage = `${randomGreeting} ${userName}! \n\nI'm your AI Tutor. You're currently exploring **${resourceName}**.\n\n### How to Use:\n\n1. **Pencil Tool** 📝 - Click the pencil icon to activate selection mode\n2. **Select Area** - Highlight any part of the content you want to learn about\n3. **Ask Question** - Type your question or use voice input\n\nI'll provide detailed explanations with relevant examples and video tutorials!\n\nReady to help with any questions. Let's get started! 🚀`;
+                }
             }
+
+            const welcomeId = 'welcome-' + Date.now();
+
+            setMessages([{
+                role: 'assistant',
+                content: welcomeMessage,
+                id: welcomeId,
+                isWelcome: true,
+                isTyping: true,
+                isConversational: true
+            }]);
+
+            localStorage.setItem(visitKey, 'true');
         }
     }, [contentId, contentTitle, userName, targetLanguage]);
 
@@ -694,7 +787,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                 language: /hindi|samajha|kaise|kya|kyun|hindi|hinglish/i.test(userQuery) ? 'hindi' : targetLanguage
             });
 
-            const { doubt, source, isSaved } = response.data.data;
+            const { doubt, source, isSaved, isConversational } = response.data.data;
 
             const aiMsgId = (Date.now() + 1).toString();
             setMessages(prev => [...prev, {
@@ -706,6 +799,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                 confidence: doubt.confidence || 95,
                 source: source,
                 isSaved: isSaved,
+                isConversational: isConversational || false,
                 pendingVideo: doubt.suggestedVideo
             }]);
 
@@ -855,29 +949,67 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
         }
     };
 
+    const handleDeletePair = (msgId) => {
+        setMessages(prev => {
+            const index = prev.findIndex(m => m.id === msgId);
+            if (index === -1) return prev;
+
+            const msg = prev[index];
+            const newMessages = [...prev];
+
+            if (msg.role === 'user') {
+                // Delete this and the next assistant response
+                const nextMsg = prev[index + 1];
+                if (nextMsg && nextMsg.role === 'assistant' && !nextMsg.isWelcome) {
+                    newMessages.splice(index, 2);
+                } else {
+                    newMessages.splice(index, 1);
+                }
+            } else {
+                // Assistant message
+                if (msg.isWelcome) {
+                    newMessages.splice(index, 1);
+                } else {
+                    // Delete this and preceding user message
+                    const prevMsg = prev[index - 1];
+                    if (prevMsg && prevMsg.role === 'user') {
+                        newMessages.splice(index - 1, 2);
+                    } else {
+                        newMessages.splice(index, 1);
+                    }
+                }
+            }
+            return newMessages;
+        });
+        toast.success('Message pair removed');
+    };
+
     return (
         <div className="flex flex-col h-full bg-background border-l w-full">
-            {/* Header */}
-            <div className="p-4 border-b bg-primary/5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center p-[1.5px] bg-gradient-to-tr from-primary via-emerald-400 to-blue-400 shadow-lg shadow-primary/20">
-                        <div className="w-full h-full rounded-full bg-primary flex items-center justify-center">
-                            <Bot className="w-4 h-4 text-white" />
+            {/* Header - Two Line Layout */}
+            <div className="p-4 border-b bg-primary/5 space-y-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center p-[1.5px] bg-gradient-to-tr from-primary via-emerald-400 to-blue-400 shadow-lg shadow-primary/20">
+                            <div className="w-full h-full rounded-full bg-primary flex items-center justify-center">
+                                <Bot className="w-4 h-4 text-white" />
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-sm">Eta AI Tutor</h3>
+                            <div className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Live Tutor</span>
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <h3 className="font-bold text-sm">Eta AI Tutor</h3>
-                        <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Live Tutor</span>
-                        </div>
-                    </div>
+                    <Sparkles className="w-4 h-4 text-primary opacity-50" />
                 </div>
 
                 <div className="flex items-center gap-2">
                     <div className="relative group">
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-background border border-border rounded-lg text-muted-foreground hover:text-primary transition-colors cursor-pointer">
-                            <Bot className="w-3.5 h-3.5" />
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-background border border-border rounded-lg text-muted-foreground hover:text-primary transition-colors cursor-pointer shadow-sm">
+                            <Bot className="w-3.5 h-3.5 px-0.5" />
                             <select
                                 value={targetLanguage}
                                 onChange={(e) => setTargetLanguage(e.target.value)}
@@ -889,9 +1021,9 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                         </div>
                     </div>
 
-                    <div className="relative group">
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-background border border-border rounded-lg text-muted-foreground hover:text-primary transition-colors cursor-pointer">
-                            <Globe className="w-3.5 h-3.5" />
+                    <div className="relative group flex-1">
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-background border border-border rounded-lg text-muted-foreground hover:text-primary transition-colors cursor-pointer shadow-sm">
+                            <Globe className="w-3.5 h-3.5 px-0.5" />
                             <select
                                 value={selectedVoice?.name || ''}
                                 onChange={(e) => {
@@ -899,7 +1031,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                                     setSelectedVoice(voice);
                                     toast.success(`Voice changed to ${voice.name}`);
                                 }}
-                                className="bg-transparent border-none text-[10px] font-bold uppercase focus:outline-none cursor-pointer max-w-[80px] truncate"
+                                className="bg-transparent border-none text-[10px] font-bold uppercase focus:outline-none cursor-pointer w-full truncate"
                             >
                                 {voices.map((v, idx) => {
                                     let label = v.name;
@@ -908,7 +1040,6 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
 
                                     if (v.isExpert) label = `✨ ${v.name}`;
                                     else {
-                                        // Format: Name (Language-Country) e.g., Hindi-IN
                                         const cleanName = v.name.replace(/Google/g, '').replace(/Hindi/g, '').trim();
                                         label = `${cleanName || 'System'} (${langCode}${countryCode ? '-' + countryCode : ''})`;
                                     }
@@ -923,7 +1054,6 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                         </div>
                     </div>
                 </div>
-                <Sparkles className="w-4 h-4 text-primary opacity-50" />
             </div>
 
             {/* Chat Area */}
@@ -956,7 +1086,19 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                                 </div>
                             </div>
 
-                            <div className="space-y-2 max-w-full overflow-hidden">
+                            <div className="flex-1 space-y-2 max-w-full overflow-hidden group/msg">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1">
+                                        {msg.role === 'user' ? 'Student' : 'AI Tutor'}
+                                    </span>
+                                    <button
+                                        onClick={() => handleDeletePair(msg.id)}
+                                        className="opacity-0 group-hover/msg:opacity-100 p-1.5 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 rounded-lg transition-all duration-200"
+                                        title="Delete Message Pair"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
                                 <div className={`py-1 text-sm leading-relaxed transition-all duration-300 w-full overflow-hidden`}>
 
                                     {msg.role === 'assistant' ? (
@@ -971,7 +1113,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                                                 onComplete={() => msg.isTyping && handleTypingComplete(msg.id)}
                                             />
 
-                                            {!msg.isTyping && (
+                                            {(!msg.isTyping && !msg.isConversational) && (
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 5 }}
                                                     animate={{ opacity: 1, y: 0 }}
@@ -1084,7 +1226,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
 
             {/* Input Area */}
             <div className="p-4 bg-card border-t border-border">
-                {(visualContext || selectedText) && (
+                {(showSelectionPreview && (selectedText || visualContext)) && (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -1093,19 +1235,29 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-[0.2em]">
                                 <Sparkles className="w-3 h-3" />
-                                {visualContext ? 'Visual Context Ready' : 'Selection Captured'}
+                                {visualContext ? 'Visual + Text Context Ready' : 'Selection Captured'}
                             </div>
-                            {!input && (
-                                <button
-                                    onClick={() => handleSend(null, 'Analyze this part from the resource')}
-                                    className="text-[10px] bg-primary text-white px-3 py-1 rounded-full font-black uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
-                                >
-                                    Explain Now
-                                </button>
-                            )}
+                            <div className="flex items-center gap-2">
+                                {selectedText && selectedText.length > 100 && (
+                                    <button
+                                        onClick={() => setContextExpanded(!contextExpanded)}
+                                        className="text-[9px] text-primary/60 hover:text-primary font-bold transition-colors"
+                                    >
+                                        {contextExpanded ? 'SHOW LESS' : 'VIEW ALL'}
+                                    </button>
+                                )}
+                                {!input && (
+                                    <button
+                                        onClick={() => handleSend(null, 'Analyze this part from the resource')}
+                                        className="text-[10px] bg-primary text-white px-3 py-1 rounded-full font-black uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
+                                    >
+                                        Explain Now
+                                    </button>
+                                )}
+                            </div>
                         </div>
                         {selectedText && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed italic bg-black/5 dark:bg-white/5 p-2 rounded-lg border border-border/10">
+                            <p className={`text-[11px] text-muted-foreground leading-relaxed italic bg-black/5 dark:bg-white/5 p-2 rounded-lg border border-border/10 ${!contextExpanded ? 'line-clamp-2' : 'max-h-32 overflow-y-auto custom-scrollbar'}`}>
                                 "{selectedText}"
                             </p>
                         )}
@@ -1118,6 +1270,14 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                     </motion.div>
                 )}
                 <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setShowSelectionPreview(!showSelectionPreview)}
+                        className={`p-2.5 rounded-xl transition-all border ${showSelectionPreview ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'bg-secondary text-muted-foreground border-border/10 hover:bg-primary/5 hover:text-primary'}`}
+                        title={showSelectionPreview ? "Hide Selection & Explain Now Tool" : "Show Selection & Explain Now Tool"}
+                    >
+                        <Sparkles className={`w-4 h-4 ${showSelectionPreview ? 'animate-pulse' : ''}`} />
+                    </button>
                     <form onSubmit={handleSend} className="relative flex-1">
                         <input
                             type="text"

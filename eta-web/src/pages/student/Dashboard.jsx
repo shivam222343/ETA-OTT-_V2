@@ -1,7 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ProfileSection from '../../components/ProfileSection';
-import ProfileCompletionModal from '../../components/ProfileCompletionModal';
 import {
     User, LayoutDashboard, BookOpen, MessageSquare,
     Bell, LogOut, Menu, X,
@@ -13,15 +11,18 @@ import {
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
-import JoinBranchModal from '../../components/student/JoinBranchModal';
-import StudentDoubtManager from '../../components/student/StudentDoubtManager';
 import Loader from '../../components/Loader';
-import ContentViewer from '../../components/faculty/ContentViewer';
-import ExtractedInfoModal from '../../components/faculty/ExtractedInfoModal';
 import ThemeToggle from '../../components/ThemeToggle';
-import YouTubeFeed from '../../components/student/YouTubeFeed';
-import LearningProgress from '../../components/student/LearningProgress';
 
+// Lazy Loaded Components
+const ProfileSection = lazy(() => import('../../components/ProfileSection'));
+const ProfileCompletionModal = lazy(() => import('../../components/ProfileCompletionModal'));
+const JoinBranchModal = lazy(() => import('../../components/student/JoinBranchModal'));
+const StudentDoubtManager = lazy(() => import('../../components/student/StudentDoubtManager'));
+const ContentViewer = lazy(() => import('../../components/faculty/ContentViewer'));
+const ExtractedInfoModal = lazy(() => import('../../components/faculty/ExtractedInfoModal'));
+const YouTubeFeed = lazy(() => import('../../components/student/YouTubeFeed'));
+const LearningProgress = lazy(() => import('../../components/student/LearningProgress'));
 export default function StudentDashboard() {
     const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -678,9 +679,11 @@ export default function StudentDashboard() {
                         )}
 
                         {activeTab === 'youtube' && (
-                            <div className="space-y-6">
-                                <YouTubeFeed onPlay={setSelectedContent} />
-                            </div>
+                            <Suspense fallback={<Loader fullScreen={false} />}>
+                                <div className="space-y-6">
+                                    <YouTubeFeed onPlay={setSelectedContent} />
+                                </div>
+                            </Suspense>
                         )}
 
                         {activeTab === 'courses' && (
@@ -753,10 +756,12 @@ export default function StudentDashboard() {
                         )}
 
                         {activeTab === 'doubts' && (
-                            <div className="space-y-6">
-                                <h3 className="text-xl font-bold flex items-center gap-2 mb-6"><MessageSquare className="w-6 h-6 text-primary" />My Academic Doubts</h3>
-                                <StudentDoubtManager />
-                            </div>
+                            <Suspense fallback={<Loader fullScreen={false} />}>
+                                <div className="space-y-6">
+                                    <h3 className="text-xl font-bold flex items-center gap-2 mb-6"><MessageSquare className="w-6 h-6 text-primary" />My Academic Doubts</h3>
+                                    <StudentDoubtManager />
+                                </div>
+                            </Suspense>
                         )}
 
                         {activeTab === 'analytics' && (
@@ -771,55 +776,67 @@ export default function StudentDashboard() {
                                         Real-time Metrics
                                     </div>
                                 </div>
-                                <LearningProgress user={user} />
+                                <Suspense fallback={<Loader fullScreen={false} />}>
+                                    <LearningProgress user={user} />
+                                </Suspense>
                             </div>
                         )}
 
                         {activeTab === 'profile' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <ProfileSection />
-                            </div>
+                            <Suspense fallback={<Loader fullScreen={false} />}>
+                                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <ProfileSection />
+                                </div>
+                            </Suspense>
                         )}
                     </div>
                 </main >
 
                 <AnimatePresence>
                     {selectedContent && (
-                        <div className="fixed inset-0 z-[100] bg-background">
-                            <ContentViewer
-                                isOpen={!!selectedContent}
-                                content={selectedContent}
-                                onClose={() => setSelectedContent(null)}
-                            />
-                        </div>
+                        <Suspense fallback={<Loader />}>
+                            <div className="fixed inset-0 z-[100] bg-background">
+                                <ContentViewer
+                                    isOpen={!!selectedContent}
+                                    content={selectedContent}
+                                    onClose={() => setSelectedContent(null)}
+                                />
+                            </div>
+                        </Suspense>
                     )}
-                    <ExtractedInfoModal
-                        isOpen={showInfoModal}
-                        onClose={() => {
-                            setShowInfoModal(false);
-                            setInfoContent(null);
-                        }}
-                        content={infoContent}
-                    />
+                    <Suspense fallback={null}>
+                        <ExtractedInfoModal
+                            isOpen={showInfoModal}
+                            onClose={() => {
+                                setShowInfoModal(false);
+                                setInfoContent(null);
+                            }}
+                            content={infoContent}
+                        />
+                    </Suspense>
                 </AnimatePresence>
 
-                <JoinBranchModal
-                    isOpen={showJoinModal}
-                    onClose={() => setShowJoinModal(false)}
-                    onSuccess={() => {
-                        fetchStudentData();
-                        setShowJoinModal(false);
-                    }}
-                />
+                <Suspense fallback={null}>
+                    {showJoinModal && (
+                        <JoinBranchModal
+                            isOpen={showJoinModal}
+                            onClose={() => {
+                                setShowJoinModal(false);
+                                fetchStudentData();
+                            }}
+                        />
+                    )}
 
-                <ProfileCompletionModal
-                    isOpen={showProfileModal}
-                    onClose={() => {
-                        setShowProfileModal(false);
-                        handleProfileComplete();
-                    }}
-                    onSkip={handleProfileSkip}
-                />
+                    {showProfileModal && (
+                        <ProfileCompletionModal
+                            isOpen={showProfileModal}
+                            onClose={() => setShowProfileModal(false)}
+                            onComplete={handleProfileComplete}
+                            onSkip={handleProfileSkip}
+                            user={user}
+                        />
+                    )}
+                </Suspense>
             </div>
         </div>
     );

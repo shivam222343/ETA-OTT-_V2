@@ -23,8 +23,10 @@ export default function LoginPage() {
 
         setLoading(true);
         try {
-            await login(email, password);
-            navigate('/dashboard');
+            const user = await login(email, password);
+            if (user?.role === 'faculty') navigate('/faculty/dashboard');
+            else if (user?.role === 'student') navigate('/student/dashboard');
+            else navigate('/dashboard');
         } catch (error) {
             console.error('Login failed:', error);
         } finally {
@@ -35,8 +37,10 @@ export default function LoginPage() {
     const handleGoogleLogin = async () => {
         setLoading(true);
         try {
-            await loginWithGoogle(role);
-            navigate('/dashboard');
+            const user = await loginWithGoogle(role);
+            if (user?.role === 'faculty') navigate('/faculty/dashboard');
+            else if (user?.role === 'student') navigate('/student/dashboard');
+            else navigate('/dashboard');
         } catch (error) {
             console.error('Google login failed:', error);
         } finally {
@@ -75,8 +79,8 @@ export default function LoginPage() {
                                 type="button"
                                 onClick={() => setRole('student')}
                                 className={`p-6 rounded-xl border-2 transition-all ${role === 'student'
-                                        ? 'border-primary bg-primary/10 shadow-lg scale-105'
-                                        : 'border-border hover:border-primary/50 hover:bg-secondary'
+                                    ? 'border-primary bg-primary/10 shadow-lg scale-105'
+                                    : 'border-border hover:border-primary/50 hover:bg-secondary'
                                     }`}
                             >
                                 <GraduationCap className="w-8 h-8 mx-auto mb-3 text-primary" />
@@ -87,8 +91,8 @@ export default function LoginPage() {
                                 type="button"
                                 onClick={() => setRole('faculty')}
                                 className={`p-6 rounded-xl border-2 transition-all ${role === 'faculty'
-                                        ? 'border-primary bg-primary/10 shadow-lg scale-105'
-                                        : 'border-border hover:border-primary/50 hover:bg-secondary'
+                                    ? 'border-primary bg-primary/10 shadow-lg scale-105'
+                                    : 'border-border hover:border-primary/50 hover:bg-secondary'
                                     }`}
                             >
                                 <Users className="w-8 h-8 mx-auto mb-3 text-primary" />
@@ -143,8 +147,8 @@ export default function LoginPage() {
                                     type="button"
                                     onClick={() => setRole('student')}
                                     className={`p-4 rounded-lg border-2 transition-all ${role === 'student'
-                                            ? 'border-primary bg-primary/10'
-                                            : 'border-border hover:border-primary/50'
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
                                         }`}
                                 >
                                     <GraduationCap className="w-6 h-6 mx-auto mb-2" />
@@ -154,8 +158,8 @@ export default function LoginPage() {
                                     type="button"
                                     onClick={() => setRole('faculty')}
                                     className={`p-4 rounded-lg border-2 transition-all ${role === 'faculty'
-                                            ? 'border-primary bg-primary/10'
-                                            : 'border-border hover:border-primary/50'
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
                                         }`}
                                 >
                                     <Users className="w-6 h-6 mx-auto mb-2" />

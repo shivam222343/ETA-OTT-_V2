@@ -104,6 +104,13 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
 
         // Apply grounding to enhanced context for Groq
         if (isRegionSelect) {
+            // Check if transcriptSegment is empty or just a placeholder/UI tag
+            const isPlaceholder = /^\(.*\)$/.test(groundingContext.transcriptSegment?.trim() || '');
+
+            // Ensure transcriptSegment has at least some real content from the resource
+            if ((!groundingContext.transcriptSegment || isPlaceholder) && fullTranscript) {
+                groundingContext.transcriptSegment = fullTranscript.substring(0, 3500); // Robust fallback
+            }
             enhancedContext = `STRICT_REGION_CONTEXT: ${JSON.stringify(groundingContext)}`;
         } else if (fullTranscript && !enhancedContext.includes(fullTranscript.substring(0, 50))) {
             // General content fallback
@@ -118,7 +125,7 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
         const language = req.body.language || 'english';
         const userName = req.dbUser.profile?.name || 'Student';
 
-        if (kgResult && kgResult.confidence >= 70) {
+        if (kgResult && kgResult.confidence >= 85) {
             console.log(`🎯 CACHE HIT (Neo4j): Confidence ${kgResult.confidence}%`);
 
             // Still try to get a video in parallel for cache hits but don't block too long or just use saved one if exists
@@ -151,56 +158,66 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
             });
         }
 
-        // 2. CACHE MISS: Run AI and YouTube Search in PARALLEL for speed
-        console.log('⚡ Cache miss: Escalating to AI + YouTube Parallel Search');
+        // 2. CACHE MISS: Run AI first, then use its response context to suggest videos
+        console.log('⚡ Cache miss: Generating AI response first to capture context');
 
-        const [aiResult, suggestedVideo] = await Promise.all([
-            // AI Task
-            aiService.askGroq(
-                query,
-                enhancedContext,
-                visualContext,
-                contentUrl,
-                contentType,
-                language,
-                userName,
-                selectedText,
-                user?.groqApiKey
-            ),
-            // YouTube Task (Wrapped in a try-catch to not let search failure break the response)
-            (async () => {
-                try {
-                    // Optimized search query construction
-                    const uiPlaceholders = [/\(Visual Scan - AI Analysis\)/g, /\(Video Focus - Analyzing Frame.*?\)/g, /\(Image Focus - AI Vision\)/g];
-                    let cleanSelectedText = (selectedText || '').trim();
-                    uiPlaceholders.forEach(regex => { cleanSelectedText = cleanSelectedText.replace(regex, ''); });
+        const aiResult = await aiService.askGroq(
+            query,
+            enhancedContext,
+            visualContext,
+            contentUrl,
+            contentType,
+            language,
+            userName,
+            selectedText,
+            user?.groqApiKey
+        );
 
-                    let searchTopic = query;
-                    const isVague = query.split(' ').length < 4 || /this|it|that|yeh|isspar|kya/i.test(query);
-                    if (isVague) {
-                        searchTopic = cleanSelectedText && cleanSelectedText.length > 5 ? `${query} ${cleanSelectedText.substring(0, 80)}` : `${query} ${contentDoc?.title || ''}`;
-                    }
+        // Perform YouTube Search using AI's response context
+        const suggestedVideo = await (async () => {
+            try {
+                // Skip if conversational or greeting (Rule 14)
+                if (aiResult.isConversational) return null;
+                const conversationalKeywords = /^(hi|hello|hey|namaste|hola|good morning|yo|who are you|thanks|thank|ok|bye)/i;
+                if (conversationalKeywords.test(query.trim()) && query.length < 30) return null;
 
-                    const videoSearchQuery = `${searchTopic} ${language === 'hindi' ? 'hindi' : 'english'} explained`.substring(0, 100);
-                    const searchResults = await youtubeService.searchVideos(videoSearchQuery, { userId: studentId, language });
+                // Build high-precision search topic using: Query + Selection + AI Response context
+                const uiPlaceholders = [/\(Visual Scan - AI Analysis\)/g, /\(Video Focus - Analyzing Frame.*?\)/g, /\(Image Focus - AI Vision\)/g, /\[\[INTRO\]\]/g, /\[\[CONCEPT\]\]/g, /\[\[CODE\]\]/g, /\[\[SUMMARY\]\]/g];
 
-                    if (searchResults && searchResults.length > 0) {
-                        const freshVideo = searchResults[0];
-                        return {
-                            id: freshVideo.id,
-                            url: freshVideo.url,
-                            title: freshVideo.title,
-                            thumbnail: freshVideo.thumbnail,
-                            views: freshVideo.views,
-                            searchQuery: videoSearchQuery
-                        };
-                    }
-                } catch (err) {
-                    console.warn('Inline video discovery failed:', err.message);
+                let cleanSelectedText = (selectedText || '').trim();
+                uiPlaceholders.forEach(regex => { cleanSelectedText = cleanSelectedText.replace(regex, ''); });
+
+                // Extract core concept from AI response (Skip intro markers)
+                let aiContext = aiResult.explanation.replace(/\[\[.*?\]\]/g, '').substring(0, 80).trim();
+
+                let searchTopic = "";
+                if (cleanSelectedText && cleanSelectedText.length > 5) {
+                    // Highest priority: Selection + AI's technical interpretation
+                    searchTopic = `${cleanSelectedText.substring(0, 60)} ${aiContext}`;
+                } else {
+                    // Fallback: Query + AI's technical interpretation
+                    searchTopic = `${query.substring(0, 50)} ${aiContext}`;
                 }
-                return null;
-            })()
-        ]);
+
+                const videoSearchQuery = `${searchTopic} ${language === 'hindi' ? 'hindi' : 'english'} tutorial`.substring(0, 100);
+                const searchResults = await youtubeService.searchVideos(videoSearchQuery, { userId: studentId, language });
+
+                if (searchResults && searchResults.length > 0) {
+                    const freshVideo = searchResults[0];
+                    return {
+                        id: freshVideo.id,
+                        url: freshVideo.url,
+                        title: freshVideo.title,
+                        thumbnail: freshVideo.thumbnail,
+                        views: freshVideo.views,
+                        searchQuery: videoSearchQuery
+                    };
+                }
+            } catch (err) {
+                console.warn('Post-AI video discovery failed:', err.message);
+            }
+            return null;
+        })();
 
         // Clean up video placeholders if no video found
         if (!suggestedVideo && aiResult.explanation.includes('[[VIDEO:')) {
@@ -240,6 +257,7 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
             suggestedVideo,
             isFromCache: false,
             source: 'AI_API',
+            isConversational: aiResult.isConversational || false,
             status: aiResult.confidence >= 80 ? 'resolved' : 'pending'
         });
 
@@ -250,6 +268,7 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
                 doubt,
                 isFromCache: false,
                 isSaved,
+                isConversational: aiResult.isConversational || false,
                 source: 'AI_API',
                 confidence: aiResult.confidence
             }

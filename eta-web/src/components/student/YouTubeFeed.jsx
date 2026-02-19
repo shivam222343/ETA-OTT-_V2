@@ -8,12 +8,13 @@ import Loader from '../Loader';
 
 const VideoSkeleton = memo(() => (
     <div className="space-y-4 animate-pulse group">
-        <div className="relative aspect-video bg-card/40 rounded-2xl border border-white/5" />
+        {/* Navy blue for dark, gray for light */}
+        <div className="relative aspect-video bg-slate-200 dark:bg-blue-900/20 rounded-2xl border border-slate-300 dark:border-white/5" />
         <div className="flex gap-4 px-1">
-            <div className="w-10 h-10 rounded-full bg-card/40 flex-shrink-0" />
+            <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-blue-900/20 flex-shrink-0" />
             <div className="flex-1 space-y-3">
-                <div className="h-4 bg-card/40 rounded w-5/6" />
-                <div className="h-3 bg-card/40 rounded w-1/2" />
+                <div className="h-4 bg-slate-200 dark:bg-blue-900/20 rounded w-5/6" />
+                <div className="h-3 bg-slate-200 dark:bg-blue-900/20 rounded w-1/2" />
             </div>
         </div>
     </div>
@@ -104,6 +105,8 @@ export default function YouTubeFeed({ onPlay }) {
     const [activeView, setActiveView] = useState('recommendations');
     const [hasInteracted, setHasInteracted] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [page, setPage] = useState(1);
+    const [refreshKey, setRefreshKey] = useState(0);
     const preparingIdRef = useRef(null);
 
     // Banner carousel state
@@ -153,13 +156,16 @@ export default function YouTubeFeed({ onPlay }) {
         fetchRecommendations();
     }, []);
 
-    const fetchRecommendations = useCallback(async (append = false) => {
+    const fetchRecommendations = useCallback(async (append = false, refresh = false) => {
         if (append) setLoadingMore(true);
         else setLoading(true);
 
         try {
-            const response = await apiClient.get('/youtube/recommendations');
+            const fetchPage = append ? page + 1 : 1;
+            const response = await apiClient.get(`/youtube/recommendations?page=${fetchPage}${refresh ? '&refresh=true' : ''}`);
+
             if (append) {
+                setPage(prev => prev + 1);
                 setRecommendations(prev => {
                     const newVideos = response.data.data.videos.filter(
                         newV => !prev.some(oldV => oldV.id === newV.id)
@@ -167,16 +173,19 @@ export default function YouTubeFeed({ onPlay }) {
                     return [...prev, ...newVideos];
                 });
             } else {
+                // If its a full load or refresh, replace the data
                 setRecommendations(response.data.data.videos);
+                setRefreshKey(prev => prev + 1); // Trigger grid animation
+                if (!refresh) setPage(1); // Reset page on non-append load
             }
         } catch (error) {
             console.error('Fetch recommendations error:', error);
-            toast.error('Failed to load recommended videos');
+            if (!refresh) toast.error('Failed to load recommended videos');
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [apiClient]);
+    }, [apiClient, page]);
 
     const handleSearch = useCallback(async (e, append = false, forceRefresh = false) => {
         if (e && e.preventDefault) e.preventDefault();
@@ -196,8 +205,10 @@ export default function YouTubeFeed({ onPlay }) {
         setHasInteracted(true);
 
         try {
-            const response = await apiClient.get(`/youtube/search?q=${encodeURIComponent(query)}`);
+            const fetchPage = append ? page + 1 : 1;
+            const response = await apiClient.get(`/youtube/search?q=${encodeURIComponent(query)}&page=${fetchPage}`);
             if (append) {
+                setPage(prev => prev + 1);
                 setVideos(prev => {
                     const newVideos = response.data.data.videos.filter(
                         newV => !prev.some(oldV => oldV.id === newV.id)
@@ -219,7 +230,8 @@ export default function YouTubeFeed({ onPlay }) {
         if (activeView === 'search') {
             handleSearch(null, false, true);
         } else {
-            fetchRecommendations();
+            // Force refresh from backend bypassing cache
+            fetchRecommendations(false, true);
         }
     }, [activeView, handleSearch, fetchRecommendations]);
 
@@ -367,8 +379,8 @@ export default function YouTubeFeed({ onPlay }) {
                                 key={index}
                                 onClick={() => setCurrentBanner(index)}
                                 className={`h-2 rounded-full transition-all ${index === currentBanner
-                                        ? 'w-8 bg-primary'
-                                        : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                                    ? 'w-8 bg-primary'
+                                    : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
                                     }`}
                             />
                         ))}
@@ -397,7 +409,7 @@ export default function YouTubeFeed({ onPlay }) {
                             {videos.map((video, index) => (
                                 <VideoCard key={`${video.id}-${index}`} video={video} onPlay={handlePlay} preparingId={preparingId} />
                             ))}
-                            {searchLoading && videos.length === 0 && Array(8).fill(null).map((_, i) => <VideoSkeleton key={`skeleton-${i}`} />)}
+                            {(searchLoading || loadingMore) && Array(8).fill(null).map((_, i) => <VideoSkeleton key={`skeleton-search-${i}`} />)}
                         </div>
 
                         {!searchLoading && videos.length === 0 && (
@@ -421,12 +433,28 @@ export default function YouTubeFeed({ onPlay }) {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-5 gap-y-10">
+                        <motion.div
+                            key={`grid-${refreshKey}`}
+                            initial="hidden"
+                            animate="visible"
+                            variants={{
+                                hidden: { opacity: 0 },
+                                visible: {
+                                    opacity: 1,
+                                    transition: {
+                                        staggerChildren: 0.05
+                                    }
+                                }
+                            }}
+                            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-5 gap-y-10"
+                        >
                             {recommendations.map((video, index) => (
-                                <VideoCard key={`${video.id}-${index}`} video={video} onPlay={handlePlay} preparingId={preparingId} />
+                                <VideoCard key={`${video.id}-${index}-${page}`} video={video} onPlay={handlePlay} preparingId={preparingId} />
                             ))}
-                            {loading && recommendations.length === 0 && Array(8).fill(null).map((_, i) => <VideoSkeleton key={`skeleton-${i}`} />)}
-                        </div>
+                            {(loading || loadingMore) && Array(8).fill(null).map((_, i) => (
+                                <VideoSkeleton key={`skeleton-rec-${i}-${recommendations.length}`} />
+                            ))}
+                        </motion.div>
 
                         {!loading && recommendations.length === 0 && (
                             <div className="py-32 flex flex-col items-center justify-center text-center">
@@ -438,13 +466,7 @@ export default function YouTubeFeed({ onPlay }) {
                 )}
 
                 {/* Infinite Scroll Trigger */}
-                <div ref={ref} className="py-20 flex flex-col items-center justify-center">
-                    {loadingMore && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-5 gap-y-10 w-full">
-                            {[...Array(4)].map((_, i) => <VideoSkeleton key={`skeleton-more-${i}`} />)}
-                        </div>
-                    )}
-                </div>
+                <div ref={ref} className="h-20" />
             </div>
         </div>
     );

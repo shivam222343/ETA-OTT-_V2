@@ -79,7 +79,12 @@ export default function FacultyAnalytics() {
 
     if (!data) return null;
 
-    const { engagementTrend, coursePerformance, avgResolutionTime } = data;
+    // Defensive destructuring with defaults
+    const {
+        engagementTrend = [],
+        coursePerformance = [],
+        avgResolutionTime = 0
+    } = data;
 
     // Transform Engagement data
     const engagementChartData = engagementTrend.map(t => ({
@@ -90,13 +95,29 @@ export default function FacultyAnalytics() {
 
     // Transform Course velocity data
     const courseVelocityData = coursePerformance.map(cp => ({
-        name: cp.name.length > 15 ? cp.name.substring(0, 15) + '...' : cp.name,
-        students: cp.load,
-        health: Math.round(cp.health)
+        name: cp.name?.length > 15 ? cp.name.substring(0, 15) + '...' : (cp.name || 'Unknown Course'),
+        students: cp.load || 0,
+        health: Math.round(cp.health || 0)
     }));
 
     // Resolution stats
     const resolutionHours = (avgResolutionTime / (1000 * 60 * 60)).toFixed(1);
+
+    // Empty state check
+    if (coursePerformance.length === 0 && engagementTrend.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-8 bg-card rounded-2xl border border-dashed border-border/50">
+                <div className="p-4 bg-primary/10 rounded-full mb-4">
+                    <BarChart3 className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">No Analytics Data Yet</h3>
+                <p className="text-muted-foreground max-w-sm">
+                    Once students start asking doubts and engaging with your courses,
+                    deep academic insights and trends will appear here.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 pb-12">

@@ -79,26 +79,48 @@ export default function LearningProgress() {
 
     if (!analytics) return null;
 
-    const { activityTrend, subjectMastery, stats, engagement } = analytics;
+    // Defensive destructuring with defaults
+    const {
+        activityTrend = [],
+        subjectMastery = [],
+        stats = { totalDoubts: 0, resolvedDoubts: 0, coursesEnrolled: 0, completionRate: 0 },
+        engagement = []
+    } = analytics;
 
     // Transform activityTrend for chart
     const activityData = activityTrend.map(t => ({
-        day: new Date(t._id).toLocaleDateString('en-US', { weekday: 'short' }),
-        doubts: t.count
+        day: t._id ? new Date(t._id).toLocaleDateString('en-US', { weekday: 'short' }) : '---',
+        doubts: t.count || 0
     }));
 
     // Transform engagement for pie chart
     const engagementData = engagement.map(e => ({
         name: e._id === 'KNOWLEDGE_GRAPH' ? 'AI Knowledge Graph' : 'Direct AI Chat',
-        value: e.count
+        value: e.count || 0
     }));
 
     // Topic Mastery transformation
     const masteryData = subjectMastery.map(s => ({
-        subject: s.name.length > 10 ? s.name.substring(0, 10) + '...' : s.name,
-        A: Math.round(s.proficiency),
+        subject: s.name?.length > 10 ? s.name.substring(0, 10) + '...' : (s.name || 'Topic'),
+        A: Math.round(s.proficiency || 0),
         fullMark: 100
     }));
+
+    // Empty state check
+    if (activityTrend.length === 0 && subjectMastery.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-8 bg-card rounded-2xl border border-dashed border-border/50">
+                <div className="p-4 bg-primary/10 rounded-full mb-4">
+                    <Target className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">No Learning Data Yet</h3>
+                <p className="text-muted-foreground max-w-sm">
+                    Start exploring your courses and asking doubts to see your progress
+                    visualized in beautiful real-time analytics.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 pb-12">

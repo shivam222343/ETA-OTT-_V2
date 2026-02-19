@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Download, Share2, Maximize2, Minimize2,
@@ -10,7 +10,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
 import { useSocket } from '../../hooks/useSocket';
-import AITutor from '../AITutor';
+const AITutor = lazy(() => import('../AITutor'));
 import Loader from '../Loader';
 import ThemeToggle from '../ThemeToggle';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
@@ -325,6 +325,23 @@ export default function ContentViewer({ isOpen, onClose, content }) {
         if (newBox) {
             setSelectionBox(newBox);
             selectionBoxRef.current = newBox;
+
+            // Auto-scroll logic when drawing/moving/resizing near edges
+            const scrollThreshold = 60;
+            const scrollSpeed = 15;
+            const container = viewerRef.current;
+
+            if (clientX > rect.right - scrollThreshold) {
+                container.scrollLeft += scrollSpeed;
+            } else if (clientX < rect.left + scrollThreshold) {
+                container.scrollLeft -= scrollSpeed;
+            }
+
+            if (clientY > rect.bottom - scrollThreshold) {
+                container.scrollTop += scrollSpeed;
+            } else if (clientY < rect.top + scrollThreshold) {
+                container.scrollTop -= scrollSpeed;
+            }
         }
     };
 
@@ -470,7 +487,17 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                                         />
                                     ))
                                 ) : (
-                                    <Page pageNumber={pageNumber} scale={scale} className="shadow-2xl rounded-sm" renderTextLayer={true} renderAnnotationLayer={true} />
+                                    <AnimatePresence mode="wait">
+                                        <motion.div
+                                            key={pageNumber}
+                                            initial={{ opacity: 0, x: 20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -20 }}
+                                            transition={{ duration: 0.2 }}
+                                        >
+                                            <Page pageNumber={pageNumber} scale={scale} className="shadow-2xl rounded-sm" renderTextLayer={true} renderAnnotationLayer={true} />
+                                        </motion.div>
+                                    </AnimatePresence>
                                 )}
                             </Document>
                         </div>
@@ -639,13 +666,23 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                                             />
                                         ))
                                     ) : (
-                                        <Page
-                                            pageNumber={pageNumber}
-                                            scale={scale}
-                                            className="shadow-xl"
-                                            renderTextLayer={true}
-                                            renderAnnotationLayer={true}
-                                        />
+                                        <AnimatePresence mode="wait">
+                                            <motion.div
+                                                key={pageNumber}
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: -20 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <Page
+                                                    pageNumber={pageNumber}
+                                                    scale={scale}
+                                                    className="shadow-xl"
+                                                    renderTextLayer={true}
+                                                    renderAnnotationLayer={true}
+                                                />
+                                            </motion.div>
+                                        </AnimatePresence>
                                     )}
                                 </Document>
                             </div>
@@ -1033,19 +1070,31 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                                         e.preventDefault();
                                     }}
                                 />
-                                <AITutor
-                                    courseId={content.courseId}
-                                    contentId={content._id}
-                                    contentTitle={content.title}
-                                    selectedText={selection}
-                                    visualContext={selectionBox}
-                                    isParentActive={activeTab === 'viewer'}
-                                    onQuerySubmit={() => {
-                                        // Clear selection after query is submitted
-                                        setSelection('');
-                                        setSelectionBox(null);
-                                    }}
-                                />
+                                <Suspense fallback={
+                                    <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-pulse">
+                                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                                            <MessageCircle className="w-6 h-6 text-primary" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="h-4 w-32 bg-secondary rounded mx-auto"></div>
+                                            <div className="h-3 w-48 bg-secondary rounded mx-auto"></div>
+                                        </div>
+                                    </div>
+                                }>
+                                    <AITutor
+                                        courseId={content.courseId}
+                                        contentId={content._id}
+                                        contentTitle={content.title}
+                                        selectedText={selection}
+                                        visualContext={selectionBox}
+                                        isParentActive={activeTab === 'viewer'}
+                                        onQuerySubmit={() => {
+                                            // Clear selection after query is submitted
+                                            setSelection('');
+                                            setSelectionBox(null);
+                                        }}
+                                    />
+                                </Suspense>
                             </motion.div>
                         )}
                     </AnimatePresence>

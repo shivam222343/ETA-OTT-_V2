@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,15 +26,16 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
-import CreateInstitutionModal from '../../components/faculty/CreateInstitutionModal';
-import JoinInstitutionModal from '../../components/faculty/JoinInstitutionModal';
-import InstitutionCard from '../../components/faculty/InstitutionCard';
-import FacultyDoubtManager from '../../components/faculty/FacultyDoubtManager';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
 
-import ProfileSection from '../../components/ProfileSection';
-import FacultyAnalytics from '../../components/faculty/FacultyAnalytics';
+// Lazy Loaded Components
+const CreateInstitutionModal = lazy(() => import('../../components/faculty/CreateInstitutionModal'));
+const JoinInstitutionModal = lazy(() => import('../../components/faculty/JoinInstitutionModal'));
+const InstitutionCard = lazy(() => import('../../components/faculty/InstitutionCard'));
+const FacultyDoubtManager = lazy(() => import('../../components/faculty/FacultyDoubtManager'));
+const ProfileSection = lazy(() => import('../../components/ProfileSection'));
+const FacultyAnalytics = lazy(() => import('../../components/faculty/FacultyAnalytics'));
 
 export default function FacultyDashboard() {
     const { user, logout } = useAuth();
@@ -393,19 +394,21 @@ export default function FacultyDashboard() {
                                             View All
                                         </button>
                                     </div>
-                                    <div className="grid md:grid-cols-2 gap-4">
-                                        {institutions.slice(0, 4).map((institution) => (
-                                            <InstitutionCard
-                                                key={institution._id}
-                                                institution={institution}
-                                                onEdit={handleEditInstitution}
-                                                onDelete={handleDeleteInstitution}
-                                                onManage={handleManageInstitution}
-                                                onLeave={handleLeaveInstitution}
-                                                user={user}
-                                            />
-                                        ))}
-                                    </div>
+                                    <Suspense fallback={<div className="h-48 flex items-center justify-center bg-secondary/10 rounded-2xl animate-pulse"><Loader fullScreen={false} /></div>}>
+                                        <div className="grid md:grid-cols-2 gap-4">
+                                            {institutions.slice(0, 4).map((institution) => (
+                                                <InstitutionCard
+                                                    key={institution._id}
+                                                    institution={institution}
+                                                    onEdit={handleEditInstitution}
+                                                    onDelete={handleDeleteInstitution}
+                                                    onManage={handleManageInstitution}
+                                                    onLeave={handleLeaveInstitution}
+                                                    user={user}
+                                                />
+                                            ))}
+                                        </div>
+                                    </Suspense>
                                 </div>
                             )}
                         </div>
@@ -609,7 +612,9 @@ export default function FacultyDashboard() {
                             <div className="flex justify-between items-center">
                                 <h2 className="text-2xl font-bold">Student Doubts</h2>
                             </div>
-                            <FacultyDoubtManager courses={courses} />
+                            <Suspense fallback={<Loader />}>
+                                <FacultyDoubtManager courses={courses} />
+                            </Suspense>
                         </div>
                     )}
 
@@ -622,13 +627,17 @@ export default function FacultyDashboard() {
                                     Live Processing
                                 </div>
                             </div>
-                            <FacultyAnalytics institutions={institutions} courses={courses} />
+                            <Suspense fallback={<Loader />}>
+                                <FacultyAnalytics institutions={institutions} courses={courses} />
+                            </Suspense>
                         </div>
                     )}
 
                     {activeTab === 'profile' && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <ProfileSection />
+                            <Suspense fallback={<Loader />}>
+                                <ProfileSection />
+                            </Suspense>
                         </div>
                     )}
 
@@ -645,33 +654,39 @@ export default function FacultyDashboard() {
             )}
 
             {/* Create Institution Modal */}
-            <CreateInstitutionModal
-                isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onSuccess={handleCreateInstitution}
-            />
+            <Suspense fallback={null}>
+                <CreateInstitutionModal
+                    isOpen={showCreateModal}
+                    onClose={() => setShowCreateModal(false)}
+                    onSuccess={handleCreateInstitution}
+                />
+            </Suspense>
 
             {/* Join Institution Modal */}
-            <JoinInstitutionModal
-                isOpen={showJoinModal}
-                onClose={() => setShowJoinModal(false)}
-                onSuccess={(newInst) => {
-                    setInstitutions([...institutions, newInst]);
-                    setShowJoinModal(false);
-                    fetchDashboardData();
-                }}
-            />
+            <Suspense fallback={null}>
+                <JoinInstitutionModal
+                    isOpen={showJoinModal}
+                    onClose={() => setShowJoinModal(false)}
+                    onSuccess={(newInst) => {
+                        setInstitutions([...institutions, newInst]);
+                        setShowJoinModal(false);
+                        fetchDashboardData();
+                    }}
+                />
+            </Suspense>
 
             {/* Edit Institution Modal */}
-            <CreateInstitutionModal
-                isOpen={showEditModal}
-                onClose={() => {
-                    setShowEditModal(false);
-                    setSelectedInstitution(null);
-                }}
-                onSuccess={handleUpdateInstitution}
-                institution={selectedInstitution}
-            />
+            <Suspense fallback={null}>
+                <CreateInstitutionModal
+                    isOpen={showEditModal}
+                    onClose={() => {
+                        setShowEditModal(false);
+                        setSelectedInstitution(null);
+                    }}
+                    onSuccess={handleUpdateInstitution}
+                    institution={selectedInstitution}
+                />
+            </Suspense>
         </div>
     );
 }

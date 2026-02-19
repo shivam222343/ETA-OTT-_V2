@@ -140,16 +140,6 @@ export function AuthProvider({ children }) {
     const loginWithGoogle = async (role = 'student') => {
         try {
             const provider = new GoogleAuthProvider();
-
-            // Mobile devices work better with redirect, desktop with popup
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-            if (isMobile) {
-                await signInWithRedirect(auth, provider);
-                // The flow continues after redirect in useEffect
-                return;
-            }
-
             const result = await signInWithPopup(auth, provider);
             const firebaseToken = await result.user.getIdToken();
             return await handleGoogleBackendAuth(result.user, firebaseToken, role);

@@ -130,7 +130,7 @@ const calculateConfidence = (params) => {
 // Helper to get embeddings from ML service (Rule 1)
 const getEmbedding = async (text) => {
     try {
-        const response = await axios.post('https://ml-service-etaott.onrender.com/embeddings', { text });
+        const response = await axios.post('http://localhost:8000/embeddings', { text });
         return response.data.success ? response.data.embedding : null;
     } catch (error) {
         console.warn('Embedding service unavailable:', error.message);
@@ -143,12 +143,22 @@ const getEmbedding = async (text) => {
  */
 export const searchKnowledgeGraph = async (query, courseId = null, context = '') => {
     try {
-        // Rule 1: Combine query with context for better semantic search on follow-ups
-        const searchPhrase = (query.split(' ').length < 4 && context)
-            ? `${query} (context: ${context.substring(0, 100)})`
-            : query;
+        // Rule 1: Prioritize selectedText for semantic search if present
+        let searchPhrase = query;
+        const isAnalyzeRequest = query.toLowerCase().includes('analyze') || query.toLowerCase().includes('explain');
+        const isShortQuery = query.split(' ').length < 5;
 
-        const embedding = await getEmbedding(searchPhrase);
+        if ((isAnalyzeRequest || isShortQuery) && context && context.length > 5) {
+            // If the query is vague, the selectedText (context) becomes the primary search driver
+            // Filter out UI placeholders from context
+            const cleanContext = context.replace(/\(Visual Scan.*?\)/g, '').replace(/\(Video Focus.*?\)/g, '').trim();
+            searchPhrase = (query.length < 10) ? cleanContext : `${query}: ${cleanContext}`;
+        } else if (context && context.length > 5) {
+            // Combine moderate query with context
+            searchPhrase = `${query} (context: ${context.substring(0, 150)})`;
+        }
+
+        const embedding = await getEmbedding(searchPhrase.substring(0, 500));
         if (!embedding) return { match: false, confidence: 0 };
 
         // Neo4j Vector Search
@@ -156,7 +166,7 @@ export const searchKnowledgeGraph = async (query, courseId = null, context = '')
         const cypher = `
             CALL db.index.vector.queryNodes('doubt_vector_index', 5, $embedding)
             YIELD node, score
-            WHERE score >= 0.75
+            WHERE score >= 0.85
             MATCH (node)-[:ANSWERS]->(a:Answer)
             OPTIONAL MATCH (node)-[:RELATES_TO]->(c:Course {id: $courseId})
             RETURN node.text as question, a.text as answer, score * 100 as confidence, (c IS NOT NULL) as isSameCourse
@@ -265,6 +275,7 @@ export const saveToKnowledgeGraph = async (params) => {
             // Auto-detect concepts (Basic simulation - Rule 5)
             WITH q, c
             UNWIND split($query, ' ') as word
+            WITH q, c, word
             WHERE size(word) > 5
             MERGE (con:Concept {name: apoc.text.capitalize(word)})
             MERGE (q)-[:RELATES_TO]->(con)
@@ -317,6 +328,34 @@ Act as if you are pointing your finger at that box and teaching the student abou
 
         const activeModel = isVisionMode ? (process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview') : (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile');
 
+        // Detect simple greetings or short conversational queries
+        const isGreeting = /^(hi|hello|hey|namaste|hola|good morning|good afternoon|good evening|yo|who are you|what is your name)/i.test(query.toLowerCase().trim());
+        const isVagueExplain = /^(explain|analyze|samajhao|samjhao|batao|kya hai|what is this|explain this|analyze this|tell me about it|samajh nhi aa rha|samajh nahi aa raha)$/i.test(query.toLowerCase().trim());
+        const hasSelection = !!selectedText || !!visualContext;
+
+        // Clean context for display (don't show raw text dumps in greetings)
+        const displayContext = (context && context.length < 50) ? context : "is resource";
+
+        // If it's a greeting, keep it brief and helpful
+        if (isGreeting && query.length < 20) {
+            return {
+                explanation: `[[INTRO]] \nNamaste ${userName}! \n\nMain aapka AI Tutor hoon. Aap abhi **${displayContext}** dekh rahe hain. \n\nAap is resource mein se koi bhi part select kar sakte hain (using the pencil icon) ya mujhse directly doubts pooch sakte hain. \n\nMain aapki kaise madad kar sakta hoon? 🚀`,
+                confidence: 100,
+                source: 'system_response',
+                isConversational: true
+            };
+        }
+
+        // Check for "explain" requests without selection - ONLY if they are vague
+        if (isVagueExplain && !hasSelection) {
+            return {
+                explanation: `[[INTRO]] \nJarur ${userName}! \n\nMain aapko **${displayContext}** ke baare mein explain kar sakta hoon. \n\n### Please Select an Area first 📝 \n\nBeheter explanation ke liye, kripya screen par **pencil icon** par click karein aur us area ko highlight karein jiske baare mein aap pooch rahe hain. \n\nJaise hi aap select karenge, main us specific part ko details ke saath samjha dunga!`,
+                confidence: 90,
+                source: 'system_response',
+                isConversational: true
+            };
+        }
+
         // Advanced Language Detection & Instruction (Rule 9/11)
         const hindiKeywords = /hindi|samajha|batao|kaise|kya|kyun|hindi|hinglish|karo|do|kaun|kab|apka|tumhara|aap|hai|hoon|tha|the|thi/i;
         const isHindiDetected = hindiKeywords.test(query) || language.toLowerCase() === 'hindi';
@@ -351,18 +390,18 @@ Act as if you are pointing your finger at that box and teaching the student abou
             let gc = { transcriptSegment: '', selectedTimestamp: '', courseContext: '', facultyResources: '' };
             try { gc = JSON.parse(rawGrounding); } catch (e) { }
 
-            systemPrompt = `You are an expert precision tutor. The student is focusing on a SPECIFIC visual region.
+            systemPrompt = `You are an expert precision tutor. The student is focusing on a SPECIFIC visual region or concept from the resource.
 
 [[CONCEPT]] 
-Start directly with a professional explanation of what the student has selected.
-- NO MENTION of timestamps, "frame number", or "at 0:02".
-- Explain visual elements, nodes, or diagrams in this specific selection confidently. 
-- Use ONLY provided context: "${gc.transcriptSegment}".
-- Ground your analysis in ${gc.courseContext}.
-- If the selection is not clear from the data, explicitly state: "The selected region is not fully clear from extracted data. Please adjust your selection."
-- AVOID VAGUE GUESSING (no "likely", "might", "probably"). Confident extraction-based explanation only.
+Start directly with a professional explanation. 
+- Primary focus: The highlighted region/concept.
+- Use the provided context: "${gc.transcriptSegment}".
+- Ground your analysis in ${gc.courseContext} and the actual resource content.
+- If the specific regional data is thin, use your knowledge of the overall resource (${gc.facultyResources}) to provide a helpful, relevant explanation.
+- NO MENTION of timestamps, frame numbers, or technical metadata.
+- AVOID VAGUE GUESSING. Use the provided transcript and resource text to be precise.
 
-STRICT: No greetings. No "Namaste". No intro fluff. No code unless the selection itself is a code snippet. No summary headings.`;
+STRICT: No greetings. No intro fluff. Start directly with the core explanation. No summary headings.`;
         } else {
             // Adaptive General Prompt
             systemPrompt = `You are a high-speed professional academic mentor. Provide a direct, crystal-clear response.

@@ -32,19 +32,20 @@ import { initializeWebSocket } from './services/websocket.service.js';
 
 const app = express();
 const httpServer = createServer(app);
+
+// Get allowed origins
+const defaultOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'https://eta-ott.netlify.app'
+];
+const envOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [];
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+
 const io = new Server(httpServer, {
     cors: {
         origin: (origin, callback) => {
-            const defaultOrigins = [
-                'http://localhost:5173',
-                'http://localhost:5174',
-                'http://localhost:3000',
-                'http://127.0.0.1:5173',
-                'https://eta-ott.netlify.app'
-            ];
-            const envOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [];
-            const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
-
             if (!origin || allowedOrigins.includes(origin) || allowedOrigins.some(a => a === '*' || (origin.endsWith('.netlify.app') && a.includes('.netlify.app')))) {
                 callback(null, true);
             } else {
@@ -57,7 +58,7 @@ const io = new Server(httpServer, {
 
 // Middleware
 app.use(helmet({
-    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    crossOriginOpenerPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false,
     contentSecurityPolicy: false
@@ -90,16 +91,9 @@ app.use(cors({
             if (allowed === '*') return true;
             if (allowed === origin) return true;
 
-            // Allow local network IP addresses (e.g. 192.168.x.x) in development
-            if (process.env.NODE_ENV === 'development') {
-                const isPrivateIP = origin.match(/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)\d+\.\d+(:\d+)?$/);
-                if (isPrivateIP) return true;
-            }
+            // Support netlify subdomains
+            if (origin.endsWith('.netlify.app')) return true;
 
-            // Support netlify subdomains (e.g. preview deploys)
-            if (origin.endsWith('.netlify.app') && (allowed.includes('.netlify.app') || allowed === 'https://*.netlify.app')) {
-                return true;
-            }
             return false;
         });
 
