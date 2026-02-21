@@ -72,6 +72,10 @@ export async function closeNeo4j() {
 
 // Initialize graph schema
 export async function initializeGraphSchema() {
+    if (!driver) {
+        console.warn('⚠️  Skipping Neo4j schema initialization - driver not connected');
+        return;
+    }
     try {
         const session = driver.session();
 
@@ -83,16 +87,17 @@ export async function initializeGraphSchema() {
             'CREATE CONSTRAINT content_id IF NOT EXISTS FOR (ct:Content) REQUIRE ct.id IS UNIQUE',
             'CREATE CONSTRAINT concept_name IF NOT EXISTS FOR (cn:Concept) REQUIRE cn.name IS UNIQUE',
             'CREATE INDEX concept_difficulty IF NOT EXISTS FOR (cn:Concept) ON (cn.difficulty)',
-            'CREATE INDEX answer_confidence IF NOT EXISTS FOR (a:Answer) ON (a.confidence)'
+            'CREATE INDEX answer_confidence IF NOT EXISTS FOR (a:Answer) ON (a.confidence)',
+            'CREATE VECTOR INDEX doubt_vector_index IF NOT EXISTS FOR (q:Question) ON (q.embedding) OPTIONS {indexConfig: {`vector.dimensions`: 384, `vector.similarity_function`: "cosine"}}'
         ];
 
         for (const constraint of constraints) {
             try {
                 await session.run(constraint);
             } catch (error) {
-                // Constraint might already exist
+                // Ignore "already exists" errors, but log others as warnings instead of crashes
                 if (!error.message.includes('already exists')) {
-                    console.error('Error creating constraint:', error);
+                    console.warn(`⚠️  Neo4j Schema Warning: Could not apply constraint/index "${constraint.split(' ')[2]}". Processed with existing data issues.`);
                 }
             }
         }

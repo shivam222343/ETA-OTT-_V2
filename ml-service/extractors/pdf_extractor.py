@@ -1,7 +1,6 @@
 import fitz  # PyMuPDF
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForTokenClassification
-import torch
+# transformers and torch removed as they were unused or heavy
 import requests
 from io import BytesIO
 import os
@@ -98,7 +97,7 @@ def download_file(url):
         raise e
 
 
-async def extract_pdf(file_url):
+def extract_pdf(file_url):
     try:
         # Download PDF
         pdf_content = download_file(file_url)

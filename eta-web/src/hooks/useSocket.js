@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const SOCKET_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api$/, '');
 
 export const useSocket = () => {
     const [socket, setSocket] = useState(null);
@@ -13,7 +13,8 @@ export const useSocket = () => {
         if (!token || !user) return;
 
         const newSocket = io(SOCKET_URL, {
-            auth: { token }
+            auth: { token },
+            transports: ['websocket', 'polling']
         });
 
         // Join user-specific room automatically

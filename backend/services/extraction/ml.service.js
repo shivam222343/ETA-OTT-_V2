@@ -2,7 +2,10 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'https://ml-service-etaott.onrender.com';
+
+// Track active requests for cancellation
+const activeControllers = new Map();
 
 /**
  * Call ML service for data extraction
@@ -12,16 +15,19 @@ const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
  * @returns {Promise<Object>} Extracted data
  */
 export const extractWithML = async (fileUrl, contentId, contentType) => {
+    const controller = new AbortController();
+    activeControllers.set(contentId.toString(), controller);
+
     try {
-        console.log(`🤖 Calling ML service for ${contentType} extraction...`);
-        console.log(`🔗 URL: ${ML_SERVICE_URL}/extract`);
+        console.log(`🤖 Calling ML service for ${contentType} extraction [ID: ${contentId}]...`);
 
         const response = await axios.post(`${ML_SERVICE_URL}/extract`, {
             file_url: fileUrl,
             content_id: contentId,
             content_type: contentType
         }, {
-            timeout: 300000 // 5 minutes timeout for transcription/heavy processing
+            timeout: 1200000, // 20 minutes
+            signal: controller.signal
         });
 
         if (response.data && response.data.success) {
@@ -32,14 +38,36 @@ export const extractWithML = async (fileUrl, contentId, contentType) => {
             throw new Error(response.data?.message || 'ML extraction failed');
         }
     } catch (error) {
+        if (axios.isCancel(error)) {
+            console.log(`⏹️ ML request for ${contentId} was aborted.`);
+            throw new Error('Extraction cancelled');
+        }
+
         console.error(`❌ ML service call failed:`, error.message);
-        if (error.code === 'ECONNREFUSED') {
-            throw new Error('ML service is not running. Please start the Python service on port 8000.');
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+            throw new Error(`ML service is unreachable at ${ML_SERVICE_URL}. Please ensure the service is deployed and active.`);
         }
         throw error;
+    } finally {
+        activeControllers.delete(contentId.toString());
     }
 };
 
+/**
+ * Stop an active ML extraction
+ * @param {string} contentId 
+ */
+export const cancelMLRequest = (contentId) => {
+    const controller = activeControllers.get(contentId.toString());
+    if (controller) {
+        controller.abort();
+        console.log(`🛑 Aborted ML request for ${contentId}`);
+        return true;
+    }
+    return false;
+};
+
 export default {
-    extractWithML
+    extractWithML,
+    cancelMLRequest
 };

@@ -1,20 +1,24 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { SocketProvider } from './contexts/SocketContext';
+import Loader from './components/Loader';
 
-// Pages
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
-import StudentDashboard from './pages/student/Dashboard';
-import FacultyDashboard from './pages/faculty/Dashboard';
-import ManageInstitution from './pages/faculty/ManageInstitution';
-import ManageCourseContent from './pages/faculty/ManageCourseContent';
-import AdminDashboard from './pages/admin/Dashboard';
-
-import BranchResources from './pages/student/BranchResources';
-import CourseResources from './pages/student/CourseResources';
+// Lazy Loaded Pages
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SignupPage = lazy(() => import('./pages/SignupPage'));
+const StudentDashboard = lazy(() => import('./pages/student/Dashboard'));
+const FacultyDashboard = lazy(() => import('./pages/faculty/Dashboard'));
+const ManageInstitution = lazy(() => import('./pages/faculty/ManageInstitution'));
+const ManageCourseContent = lazy(() => import('./pages/faculty/ManageCourseContent'));
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const BranchResources = lazy(() => import('./pages/student/BranchResources'));
+const CourseResources = lazy(() => import('./pages/student/CourseResources'));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
+const AdminSignupPage = lazy(() => import('./pages/AdminSignupPage'));
 
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
@@ -38,23 +42,56 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public Routes */}
-      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-      <Route path="/signup" element={user ? <Navigate to="/dashboard" replace /> : <SignupPage />} />
+      <Route path="/" element={
+        user ? (
+          user.role === 'faculty' ? <Navigate to="/faculty/dashboard" replace /> :
+            user.role === 'admin' ? <AdminDashboard /> :
+              <Navigate to="/student/dashboard" replace />
+        ) : <LandingPage />
+      } />
+      <Route path="/login" element={
+        user ? (
+          user.role === 'faculty' ? <Navigate to="/faculty/dashboard" replace /> :
+            user.role === 'admin' ? <AdminDashboard /> :
+              <Navigate to="/student/dashboard" replace />
+        ) : <LoginPage />
+      } />
+      <Route path="/signup" element={
+        user ? (
+          user.role === 'faculty' ? <Navigate to="/faculty/dashboard" replace /> :
+            user.role === 'admin' ? <AdminDashboard /> :
+              <Navigate to="/student/dashboard" replace />
+        ) : <SignupPage />
+      } />
+      <Route path="/admin/login" element={
+        user && user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <AdminLoginPage />
+      } />
+      <Route path="/admin/signup" element={
+        user && user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <AdminSignupPage />
+      } />
 
       {/* Protected Routes - Dashboard */}
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
-            {user?.role === 'student' && <StudentDashboard />}
-            {user?.role === 'faculty' && <FacultyDashboard />}
+            {user?.role === 'student' && <Navigate to="/student/dashboard" replace />}
+            {user?.role === 'faculty' && <Navigate to="/faculty/dashboard" replace />}
             {user?.role === 'admin' && <AdminDashboard />}
           </ProtectedRoute>
         }
       />
 
       {/* Student Routes */}
+      <Route
+        path="/student/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <StudentDashboard />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/student/branch/:branchId"
         element={
@@ -124,22 +161,26 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <div className="min-h-screen bg-background text-foreground">
-            <AppRoutes />
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                duration: 3000,
-                style: {
-                  background: 'hsl(var(--card))',
-                  color: 'hsl(var(--card-foreground))',
-                  border: '1px solid hsl(var(--border))'
-                }
-              }}
-            />
-          </div>
-        </Router>
+        <SocketProvider>
+          <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <div className="min-h-screen bg-background text-foreground">
+              <Suspense fallback={<Loader />}>
+                <AppRoutes />
+              </Suspense>
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  duration: 3000,
+                  style: {
+                    background: 'hsl(var(--card))',
+                    color: 'hsl(var(--card-foreground))',
+                    border: '1px solid hsl(var(--border))'
+                  }
+                }}
+              />
+            </div>
+          </Router>
+        </SocketProvider>
       </AuthProvider>
     </ThemeProvider>
   );

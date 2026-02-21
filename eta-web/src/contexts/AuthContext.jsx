@@ -5,7 +5,9 @@ import {
     signOut,
     onAuthStateChanged,
     GoogleAuthProvider,
-    signInWithPopup
+    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import apiClient from '../api/axios.config';
@@ -19,37 +21,70 @@ export function AuthProvider({ children }) {
     const [firebaseUser, setFirebaseUser] = useState(null);
 
     useEffect(() => {
+        const checkRedirect = async () => {
+            try {
+                const result = await getRedirectResult(auth);
+                if (result) {
+                    const firebaseToken = await result.user.getIdToken();
+                    await handleGoogleBackendAuth(result.user, firebaseToken, 'student');
+                }
+            } catch (error) {
+                console.error('Redirect result error:', error);
+            }
+        };
+        checkRedirect();
+
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             setFirebaseUser(firebaseUser);
 
             if (firebaseUser) {
-                // Check if we have a JWT token from login/signup
                 const jwtToken = localStorage.getItem('token');
-
                 if (jwtToken) {
-                    // We have a JWT token, fetch user profile
                     try {
                         const response = await apiClient.get('/auth/profile');
                         setUser(response.data.data.user);
                     } catch (error) {
                         console.error('Failed to fetch user profile:', error);
-                        // Token might be invalid, clear it
                         localStorage.removeItem('token');
                         setUser(null);
                     }
                 }
-                // If no JWT token, user will be set during login/signup
             } else {
                 setUser(null);
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
             }
-
             setLoading(false);
         });
 
         return unsubscribe;
     }, []);
+
+    const handleGoogleBackendAuth = async (firebaseUser, firebaseToken, role) => {
+        try {
+            const response = await apiClient.post('/auth/login', { firebaseToken });
+            const { user, token } = response.data.data;
+            localStorage.setItem('token', token);
+            setUser(user);
+            toast.success('Logged in with Google!');
+            return user;
+        } catch (loginError) {
+            if (loginError.response?.status === 404) {
+                const response = await apiClient.post('/auth/signup', {
+                    firebaseUid: firebaseUser.uid,
+                    email: firebaseUser.email,
+                    name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+                    role
+                });
+                const { user, token } = response.data.data;
+                localStorage.setItem('token', token);
+                setUser(user);
+                toast.success('Account created with Google!');
+                return user;
+            }
+            throw loginError;
+        }
+    };
 
     const signup = async (email, password, name, role) => {
         try {
@@ -107,36 +142,7 @@ export function AuthProvider({ children }) {
             const provider = new GoogleAuthProvider();
             const result = await signInWithPopup(auth, provider);
             const firebaseToken = await result.user.getIdToken();
-
-            // Try to login first
-            try {
-                const response = await apiClient.post('/auth/login', {
-                    firebaseToken
-                });
-
-                const { user, token } = response.data.data;
-                localStorage.setItem('token', token);
-                setUser(user);
-                toast.success('Logged in with Google!');
-                return user;
-            } catch (loginError) {
-                // If user doesn't exist, create account
-                if (loginError.response?.status === 404) {
-                    const response = await apiClient.post('/auth/signup', {
-                        firebaseUid: result.user.uid,
-                        email: result.user.email,
-                        name: result.user.displayName || result.user.email.split('@')[0],
-                        role
-                    });
-
-                    const { user, token } = response.data.data;
-                    localStorage.setItem('token', token);
-                    setUser(user);
-                    toast.success('Account created with Google!');
-                    return user;
-                }
-                throw loginError;
-            }
+            return await handleGoogleBackendAuth(result.user, firebaseToken, role);
         } catch (error) {
             console.error('Google login error:', error);
             toast.error(error.response?.data?.message || 'Google login failed');
@@ -157,6 +163,26 @@ export function AuthProvider({ children }) {
         }
     };
 
+    const updateProfile = async (profileData) => {
+        try {
+            const isFormData = profileData instanceof FormData;
+            const response = await apiClient.put('/auth/profile', profileData, {
+                headers: {
+                    'Content-Type': isFormData ? 'multipart/form-data' : 'application/json'
+                }
+            });
+
+            const { user: updatedUser } = response.data.data;
+            setUser(updatedUser);
+            toast.success('Profile updated successfully!');
+            return updatedUser;
+        } catch (error) {
+            console.error('Update profile error:', error);
+            toast.error(error.response?.data?.message || 'Failed to update profile');
+            throw error;
+        }
+    };
+
     const value = {
         user,
         firebaseUser,
@@ -164,7 +190,9 @@ export function AuthProvider({ children }) {
         signup,
         login,
         loginWithGoogle,
-        logout
+        logout,
+        updateProfile,
+        updateUser: setUser
     };
 
     return (

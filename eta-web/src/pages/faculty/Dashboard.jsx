@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,22 +21,29 @@ import {
     Plus,
     Key,
     Video,
-    Trash2
+    Trash2,
+    User
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
-import CreateInstitutionModal from '../../components/faculty/CreateInstitutionModal';
-import JoinInstitutionModal from '../../components/faculty/JoinInstitutionModal';
-import InstitutionCard from '../../components/faculty/InstitutionCard';
-import FacultyDoubtManager from '../../components/faculty/FacultyDoubtManager';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
+import NotificationButton from '../../components/NotificationButton';
+
+// Lazy Loaded Components
+const CreateInstitutionModal = lazy(() => import('../../components/faculty/CreateInstitutionModal'));
+const JoinInstitutionModal = lazy(() => import('../../components/faculty/JoinInstitutionModal'));
+const InstitutionCard = lazy(() => import('../../components/faculty/InstitutionCard'));
+const FacultyDoubtManager = lazy(() => import('../../components/faculty/FacultyDoubtManager'));
+const ProfileSection = lazy(() => import('../../components/ProfileSection'));
+const FacultyAnalytics = lazy(() => import('../../components/faculty/FacultyAnalytics'));
 
 export default function FacultyDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview');
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     const [loading, setLoading] = useState(true);
     const [institutions, setInstitutions] = useState([]);
     const [courses, setCourses] = useState([]);
@@ -53,7 +60,7 @@ export default function FacultyDashboard() {
         { id: 'content', label: 'Content', icon: Upload },
         { id: 'doubts', label: 'Doubts', icon: MessageSquare },
         { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'profile', label: 'Profile', icon: User },
     ];
 
     const stats = [
@@ -66,6 +73,15 @@ export default function FacultyDashboard() {
     // Fetch dashboard data
     useEffect(() => {
         fetchDashboardData();
+        const handleResize = () => {
+            const mobile = window.innerWidth < 1024;
+            setIsMobile(mobile);
+            if (mobile) setSidebarOpen(false);
+            else setSidebarOpen(true);
+        };
+        handleResize(); // Initial call
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, [activeTab]);
 
     const fetchDashboardData = async () => {
@@ -78,8 +94,8 @@ export default function FacultyDashboard() {
             ]);
 
             setInstitutions(instRes.data.data.institutions || []);
-            setCourses(courseRes.data.data.courses || []);
-            setRecentContent(contentRes.data.data.recentContent || []);
+            setCourses((courseRes.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
+            setRecentContent((contentRes.data.data.recentContent || []).filter(c => c.courseId?.code !== 'YT_DISCOVERY'));
         } catch (error) {
             console.error('Fetch dashboard data error:', error);
             // Don't show toast for recent content failure if other parts work
@@ -152,7 +168,20 @@ export default function FacultyDashboard() {
     };
 
     return (
-        <div className="min-h-screen bg-background flex">
+        <div className="h-screen bg-background flex relative overflow-hidden">
+            {/* Mobile Overlay */}
+            <AnimatePresence>
+                {isMobile && sidebarOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setSidebarOpen(false)}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"
+                    />
+                )}
+            </AnimatePresence>
+
             {/* Sidebar */}
             <AnimatePresence mode="wait">
                 {sidebarOpen && (
@@ -160,8 +189,8 @@ export default function FacultyDashboard() {
                         initial={{ x: -300 }}
                         animate={{ x: 0 }}
                         exit={{ x: -300 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed lg:sticky top-0 left-0 h-screen w-64 bg-card border-r z-40 flex flex-col"
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="fixed lg:sticky top-0 left-0 h-screen w-64 bg-card border-r z-40 flex flex-col shadow-xl lg:shadow-none"
                     >
                         {/* Logo */}
                         <div className="p-6 border-b flex items-center justify-between">
@@ -180,10 +209,14 @@ export default function FacultyDashboard() {
                         {/* User Info */}
                         <div className="p-4 border-b">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <span className="text-primary font-semibold">
-                                        {user?.profile?.name?.charAt(0) || 'F'}
-                                    </span>
+                                <div className="w-10 h-10 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center border border-primary/20">
+                                    {user?.profile?.avatar ? (
+                                        <img src={user.profile.avatar} alt={user.profile.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-primary font-semibold">
+                                            {user?.profile?.name?.charAt(0) || 'F'}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate">{user?.profile?.name || 'Faculty'}</p>
@@ -201,7 +234,10 @@ export default function FacultyDashboard() {
                                     return (
                                         <li key={item.id}>
                                             <button
-                                                onClick={() => setActiveTab(item.id)}
+                                                onClick={() => {
+                                                    setActiveTab(item.id);
+                                                    if (isMobile) setSidebarOpen(false);
+                                                }}
                                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${isActive
                                                     ? 'bg-primary text-white shadow-lg'
                                                     : 'hover:bg-secondary text-foreground'
@@ -231,37 +267,48 @@ export default function FacultyDashboard() {
             </AnimatePresence>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-h-screen">
+            <div className="flex-1 flex flex-col h-screen overflow-hidden">
                 {/* Top Bar */}
                 <header className="sticky top-0 z-30 bg-card border-b px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                    <div className="header-dashboard">
+                        <div className="header-title-group">
                             <button
                                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                                className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                                className="p-2 hover:bg-secondary rounded-lg transition-colors flex-shrink-0"
                             >
                                 <Menu className="w-5 h-5" />
                             </button>
-                            <h1 className="text-2xl font-bold">Faculty Dashboard</h1>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                            <ThemeToggle />
-                            {/* Search */}
-                            <div className="hidden md:flex items-center gap-2 bg-secondary px-4 py-2 rounded-lg">
-                                <Search className="w-5 h-5 text-muted-foreground" />
-                                <input
-                                    type="text"
-                                    placeholder="Search..."
-                                    className="bg-transparent border-none outline-none w-64"
-                                />
-                            </div>
+                        <div className="flex-1 flex items-center justify-end gap-3 sm:gap-4">
+                            <h1 className="hidden sm:block text-base md:text-lg font-black tracking-tight mr-2 whitespace-nowrap">Faculty Dashboard</h1>
 
-                            {/* Notifications */}
-                            <button className="relative p-2 hover:bg-secondary rounded-lg transition-colors">
-                                <Bell className="w-5 h-5" />
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                            </button>
+                            <div className="header-actions-group flex items-center gap-2 sm:gap-3">
+                                <ThemeToggle />
+                                <div className="hidden lg:flex items-center gap-2 bg-secondary px-4 py-2 rounded-lg">
+                                    <Search className="w-4 h-4 text-muted-foreground" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search..."
+                                        className="bg-transparent border-none outline-none w-32 xl:w-48 text-sm"
+                                    />
+                                </div>
+
+                                <NotificationButton />
+
+                                <button
+                                    onClick={() => setActiveTab('profile')}
+                                    className="w-10 h-10 rounded-full overflow-hidden border border-border hover:ring-2 hover:ring-primary/20 transition-all flex-shrink-0"
+                                >
+                                    {user?.profile?.avatar ? (
+                                        <img src={user.profile.avatar} alt={user.profile.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                            {user?.profile?.name?.[0] || 'F'}
+                                        </div>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -345,19 +392,21 @@ export default function FacultyDashboard() {
                                             View All
                                         </button>
                                     </div>
-                                    <div className="grid md:grid-cols-2 gap-4">
-                                        {institutions.slice(0, 4).map((institution) => (
-                                            <InstitutionCard
-                                                key={institution._id}
-                                                institution={institution}
-                                                onEdit={handleEditInstitution}
-                                                onDelete={handleDeleteInstitution}
-                                                onManage={handleManageInstitution}
-                                                onLeave={handleLeaveInstitution}
-                                                user={user}
-                                            />
-                                        ))}
-                                    </div>
+                                    <Suspense fallback={<div className="h-48 flex items-center justify-center bg-secondary/10 rounded-2xl animate-pulse"><Loader fullScreen={false} /></div>}>
+                                        <div className="grid md:grid-cols-2 gap-4">
+                                            {institutions.slice(0, 4).map((institution) => (
+                                                <InstitutionCard
+                                                    key={institution._id}
+                                                    institution={institution}
+                                                    onEdit={handleEditInstitution}
+                                                    onDelete={handleDeleteInstitution}
+                                                    onManage={handleManageInstitution}
+                                                    onLeave={handleLeaveInstitution}
+                                                    user={user}
+                                                />
+                                            ))}
+                                        </div>
+                                    </Suspense>
                                 </div>
                             )}
                         </div>
@@ -365,22 +414,22 @@ export default function FacultyDashboard() {
 
                     {activeTab === 'institutions' && (
                         <div className="space-y-6">
-                            <div className="flex justify-between items-center">
-                                <h2 className="text-2xl font-bold">Institutions</h2>
-                                <div className="flex items-center gap-3">
+                            <div className="header-dashboard">
+                                <h2 className="text-2xl font-bold truncate">Institutions</h2>
+                                <div className="header-actions-group">
                                     <button
                                         onClick={() => setShowJoinModal(true)}
                                         className="btn-secondary flex items-center gap-2"
                                     >
                                         <Key className="w-4 h-4" />
-                                        Join Institution
+                                        <span className="btn-text">Join Institution</span>
                                     </button>
                                     <button
                                         onClick={() => setShowCreateModal(true)}
                                         className="btn-primary flex items-center gap-2"
                                     >
                                         <Plus className="w-5 h-5" />
-                                        Create Institution
+                                        <span className="btn-text">Create Institution</span>
                                     </button>
                                 </div>
                             </div>
@@ -431,11 +480,11 @@ export default function FacultyDashboard() {
 
                     {activeTab === 'courses' && (
                         <div className="space-y-6">
-                            <div className="flex justify-between items-center">
-                                <h2 className="text-2xl font-bold">Courses</h2>
-                                <button className="btn-primary flex items-center gap-2">
+                            <div className="header-dashboard">
+                                <h2 className="text-2xl font-bold truncate">Courses</h2>
+                                <button className="btn-primary flex items-center gap-2 flex-shrink-0">
                                     <Plus className="w-5 h-5" />
-                                    Add Course
+                                    <span className="btn-text">Add Course</span>
                                 </button>
                             </div>
                             {courses.length > 0 ? (
@@ -487,11 +536,11 @@ export default function FacultyDashboard() {
 
                     {activeTab === 'content' && (
                         <div className="space-y-6">
-                            <div className="flex justify-between items-center">
-                                <h2 className="text-2xl font-bold">Content Library</h2>
-                                <button className="btn-primary flex items-center gap-2" onClick={() => setActiveTab('courses')}>
+                            <div className="header-dashboard">
+                                <h2 className="text-2xl font-bold truncate">Content Library</h2>
+                                <button className="btn-primary flex items-center gap-2 flex-shrink-0" onClick={() => setActiveTab('courses')}>
                                     <Upload className="w-5 h-5" />
-                                    Manage Content
+                                    <span className="btn-text">Manage Content</span>
                                 </button>
                             </div>
                             {recentContent.length > 0 ? (
@@ -561,55 +610,36 @@ export default function FacultyDashboard() {
                             <div className="flex justify-between items-center">
                                 <h2 className="text-2xl font-bold">Student Doubts</h2>
                             </div>
-                            <FacultyDoubtManager courses={courses} />
+                            <Suspense fallback={<Loader />}>
+                                <FacultyDoubtManager courses={courses} />
+                            </Suspense>
                         </div>
                     )}
 
                     {activeTab === 'analytics' && (
                         <div className="space-y-6">
-                            <h2 className="text-2xl font-bold">Analytics</h2>
-                            <div className="card p-6">
-                                <div className="text-center py-12 text-muted-foreground">
-                                    <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                                    <p className="text-lg mb-2">No analytics data</p>
-                                    <p className="text-sm">Analytics will be available once you have students</p>
+                            <div className="header-dashboard">
+                                <h2 className="text-2xl font-bold truncate">Academic Analysis</h2>
+                                <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest bg-secondary px-3 py-1.5 rounded-lg border border-border/50">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    Live Processing
                                 </div>
                             </div>
+                            <Suspense fallback={<Loader />}>
+                                <FacultyAnalytics institutions={institutions} courses={courses} />
+                            </Suspense>
                         </div>
                     )}
 
-                    {activeTab === 'settings' && (
-                        <div className="space-y-6">
-                            <h2 className="text-2xl font-bold">Settings</h2>
-                            <div className="card p-6">
-                                <div className="space-y-6">
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-4">Profile Settings</h3>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium mb-2">Name</label>
-                                                <input
-                                                    type="text"
-                                                    value={user?.profile?.name || ''}
-                                                    className="input w-full"
-                                                    readOnly
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium mb-2">Email</label>
-                                                <input
-                                                    type="email"
-                                                    value={user?.email || ''}
-                                                    className="input w-full"
-                                                    readOnly
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    {activeTab === 'profile' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <Suspense fallback={<Loader />}>
+                                <ProfileSection />
+                            </Suspense>
                         </div>
                     )}
+
+
                 </main>
             </div>
 
@@ -622,33 +652,39 @@ export default function FacultyDashboard() {
             )}
 
             {/* Create Institution Modal */}
-            <CreateInstitutionModal
-                isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onSuccess={handleCreateInstitution}
-            />
+            <Suspense fallback={null}>
+                <CreateInstitutionModal
+                    isOpen={showCreateModal}
+                    onClose={() => setShowCreateModal(false)}
+                    onSuccess={handleCreateInstitution}
+                />
+            </Suspense>
 
             {/* Join Institution Modal */}
-            <JoinInstitutionModal
-                isOpen={showJoinModal}
-                onClose={() => setShowJoinModal(false)}
-                onSuccess={(newInst) => {
-                    setInstitutions([...institutions, newInst]);
-                    setShowJoinModal(false);
-                    fetchDashboardData();
-                }}
-            />
+            <Suspense fallback={null}>
+                <JoinInstitutionModal
+                    isOpen={showJoinModal}
+                    onClose={() => setShowJoinModal(false)}
+                    onSuccess={(newInst) => {
+                        setInstitutions([...institutions, newInst]);
+                        setShowJoinModal(false);
+                        fetchDashboardData();
+                    }}
+                />
+            </Suspense>
 
             {/* Edit Institution Modal */}
-            <CreateInstitutionModal
-                isOpen={showEditModal}
-                onClose={() => {
-                    setShowEditModal(false);
-                    setSelectedInstitution(null);
-                }}
-                onSuccess={handleUpdateInstitution}
-                institution={selectedInstitution}
-            />
+            <Suspense fallback={null}>
+                <CreateInstitutionModal
+                    isOpen={showEditModal}
+                    onClose={() => {
+                        setShowEditModal(false);
+                        setSelectedInstitution(null);
+                    }}
+                    onSuccess={handleUpdateInstitution}
+                    institution={selectedInstitution}
+                />
+            </Suspense>
         </div>
     );
 }

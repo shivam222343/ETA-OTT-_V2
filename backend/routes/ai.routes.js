@@ -5,18 +5,23 @@ import ttsService from '../services/tts.service.js';
 const router = express.Router();
 
 /**
- * Text-to-Speech endpoint (AWS Polly)
- * Provides pure Indian voice for AI explanations
+ * Text-to-Speech endpoint
+ * Supports AWS Polly (Indian Accent) and ElevenLabs (Human-like)
  */
 router.post('/tts', authenticate, async (req, res) => {
     try {
-        const { text, voiceId = "Aditi" } = req.body;
+        const { text, voiceId, engine = 'elevenlabs' } = req.body;
 
         if (!text) {
             return res.status(400).json({ success: false, message: 'Text is required' });
         }
 
-        const audioBuffer = await ttsService.synthesizePolly(text, voiceId);
+        let audioBuffer;
+        if (engine === 'elevenlabs') {
+            audioBuffer = await ttsService.synthesizeElevenLabs(text, voiceId);
+        } else {
+            audioBuffer = await ttsService.synthesizePolly(text, voiceId || "Aditi");
+        }
 
         res.set({
             'Content-Type': 'audio/mpeg',

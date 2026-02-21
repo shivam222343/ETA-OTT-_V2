@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, User, BookOpen, Clock, CheckCircle2, Send, Search, Filter } from 'lucide-react';
 import apiClient from '../../api/axios.config';
 import toast from 'react-hot-toast';
-import { useSocket } from '../../hooks/useSocket';
+import { useSocket } from '../../contexts/SocketContext';
 import Loader from '../Loader';
 
 export default function FacultyDoubtManager({ courses }) {
@@ -84,6 +84,9 @@ export default function FacultyDoubtManager({ courses }) {
             setSubmitting(prev => ({ ...prev, [doubtId]: false }));
         }
     };
+
+    const [expandedText, setExpandedText] = useState({});
+    const [expandedAI, setExpandedAI] = useState({});
 
     return (
         <div className="space-y-6">
@@ -169,16 +172,38 @@ export default function FacultyDoubtManager({ courses }) {
                                         </p>
                                         {doubt.selectedText && (
                                             <div className="mt-3 pt-3 border-t border-border/50">
-                                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold mb-2">Contextual Highlight</p>
-                                                <p className="text-xs bg-background p-2 rounded border-l-4 border-primary">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Contextual Highlight</p>
+                                                    {doubt.selectedText.length > 150 && (
+                                                        <button
+                                                            onClick={() => setExpandedText(prev => ({ ...prev, [doubt._id]: !prev[doubt._id] }))}
+                                                            className="text-[10px] text-primary font-black uppercase hover:underline"
+                                                        >
+                                                            {expandedText[doubt._id] ? 'Show Less' : 'View More'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <p className={`text-xs bg-background p-2 rounded border-l-4 border-primary whitespace-pre-wrap ${!expandedText[doubt._id] && 'line-clamp-3'}`}>
                                                     {doubt.selectedText}
                                                 </p>
                                             </div>
                                         )}
                                         {doubt.aiResponse && (
                                             <div className="mt-4 p-3 bg-red-500/5 rounded-lg border border-red-500/10">
-                                                <p className="text-[10px] text-red-600 font-bold uppercase mb-1">Tentative AI Answer (Low Confidence)</p>
-                                                <p className="text-xs text-muted-foreground line-clamp-2">{doubt.aiResponse}</p>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <p className="text-[10px] text-red-600 font-bold uppercase">Tentative AI Answer (Low Confidence)</p>
+                                                    {doubt.aiResponse.length > 150 && (
+                                                        <button
+                                                            onClick={() => setExpandedAI(prev => ({ ...prev, [doubt._id]: !prev[doubt._id] }))}
+                                                            className="text-[10px] text-red-600 font-black uppercase hover:underline"
+                                                        >
+                                                            {expandedAI[doubt._id] ? 'Show Less' : 'View More'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <p className={`text-xs text-muted-foreground whitespace-pre-wrap ${!expandedAI[doubt._id] && 'line-clamp-2'}`}>
+                                                    {doubt.aiResponse}
+                                                </p>
                                             </div>
                                         )}
                                     </div>

@@ -36,94 +36,106 @@ export default function QRCodeModal({ isOpen, onClose, branch }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-card rounded-xl shadow-2xl max-w-md w-full"
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                className="bg-card rounded-2xl shadow-2xl max-w-md md:max-w-4xl w-full overflow-hidden border border-border"
             >
-                <div className="border-b px-6 py-4 flex items-center justify-between">
-                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                        <QrCode className="w-6 h-6 text-primary" />
-                        Branch QR Code
-                    </h2>
+                {/* Header */}
+                <div className="border-b bg-muted/30 px-6 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                            <QrCode className="w-5 h-5 text-primary" />
+                        </div>
+                        <h2 className="text-xl font-bold tracking-tight">Branch Access Portal</h2>
+                    </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                        className="p-2 hover:bg-secondary rounded-full transition-colors group"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
-                    <div className="text-center">
-                        <h3 className="text-lg font-semibold mb-2">{branch.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                            {branch.institutionId?.name || 'Institution'}
-                        </p>
-                    </div>
+                <div className="p-6 md:p-8 flex flex-col md:flex-row gap-8">
+                    {/* Left Section - Info & Details (Mobile Top / Desktop Left) */}
+                    <div className="flex-1 space-y-6">
+                        <div>
+                            <span className="text-[10px] font-black uppercase text-primary tracking-widest bg-primary/10 px-2 py-1 rounded">Branch Details</span>
+                            <h3 className="text-3xl font-black mt-2 leading-tight">{branch.name}</h3>
+                            <p className="text-muted-foreground font-medium mt-1">
+                                {branch.institutionId?.name || 'Institution Headed'}
+                            </p>
+                        </div>
 
-                    {/* QR Code */}
-                    <div className="flex justify-center p-6 bg-white rounded-lg">
-                        <QRCodeSVG
-                            id="qr-code-svg"
-                            value={JSON.stringify({
-                                type: 'branch',
-                                branchId: branch._id,
-                                accessKey: branch.accessKey,
-                                name: branch.name
-                            })}
-                            size={256}
-                            level="H"
-                            includeMargin={true}
-                        />
-                    </div>
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 space-y-3">
+                            <h4 className="text-sm font-bold flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                                <span className="p-1 bg-blue-500 rounded-md text-white">💡</span> Expert Tip
+                            </h4>
+                            <p className="text-sm leading-relaxed text-blue-900/80 dark:text-blue-100/80">
+                                Share this portal with your students. They can join instantly by scanning the QR or using the secure access key below.
+                            </p>
+                        </div>
 
-                    {/* Access Key */}
-                    <div className="space-y-2">
-                        <label className="block text-sm font-medium">Access Key</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={branch.accessKey}
-                                readOnly
-                                className="input flex-1 font-mono text-sm"
-                            />
+                        <div className="flex flex-col gap-3 pt-4">
                             <button
-                                onClick={copyAccessKey}
-                                className="btn-secondary flex items-center gap-2"
+                                onClick={downloadQR}
+                                className="btn-primary flex items-center justify-center gap-3 py-4 shadow-lg shadow-primary/20"
                             >
-                                <Copy className="w-4 h-4" />
-                                Copy
+                                <Download className="w-5 h-5" />
+                                <span className="font-bold">Download Pro Kit</span>
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="btn-secondary py-3 font-bold"
+                            >
+                                Dismiss
                             </button>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Students can use this key to join the branch
-                        </p>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex gap-3">
-                        <button
-                            onClick={downloadQR}
-                            className="btn-primary flex-1 flex items-center justify-center gap-2"
-                        >
-                            <Download className="w-4 h-4" />
-                            Download QR
-                        </button>
-                        <button
-                            onClick={onClose}
-                            className="btn-secondary flex-1"
-                        >
-                            Close
-                        </button>
-                    </div>
+                    {/* Right Section - Interactive QR & Key (Mobile Bottom / Desktop Right) */}
+                    <div className="w-full md:w-[380px] space-y-6 flex flex-col items-center justify-center bg-muted/20 rounded-2xl p-6 border border-border/50">
+                        {/* QR Container */}
+                        <div className="relative group">
+                            <div className="absolute -inset-2 bg-primary/20 rounded-2xl blur-xl group-hover:bg-primary/30 transition-all opacity-0 group-hover:opacity-100"></div>
+                            <div className="relative bg-white p-4 rounded-xl shadow-xl transition-transform group-hover:scale-[1.02]">
+                                <QRCodeSVG
+                                    id="qr-code-svg"
+                                    value={JSON.stringify({
+                                        type: 'branch',
+                                        branchId: branch._id,
+                                        accessKey: branch.accessKey,
+                                        name: branch.name
+                                    })}
+                                    size={240}
+                                    level="H"
+                                    includeMargin={false}
+                                />
+                            </div>
+                        </div>
 
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                        <p className="text-sm text-blue-900 dark:text-blue-100">
-                            <strong>Tip:</strong> Share this QR code with students to let them quickly join your branch. They can also manually enter the access key.
-                        </p>
+                        {/* Key Display */}
+                        <div className="w-full space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Secure Access Key</label>
+                            <div className="flex gap-2 p-1.5 bg-background border border-border rounded-xl focus-within:ring-2 ring-primary/20 transition-all">
+                                <input
+                                    type="text"
+                                    value={branch.accessKey}
+                                    readOnly
+                                    className="bg-transparent border-none focus:ring-0 flex-1 px-3 font-mono text-lg font-bold tracking-tighter"
+                                />
+                                <button
+                                    onClick={copyAccessKey}
+                                    className="p-3 hover:bg-primary hover:text-white rounded-lg transition-all"
+                                    title="Copy to clipboard"
+                                >
+                                    <Copy className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </motion.div>

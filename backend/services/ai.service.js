@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import dotenv from 'dotenv';
 import { runNeo4jQuery } from '../config/neo4j.config.js';
 
@@ -7,6 +7,189 @@ dotenv.config();
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+/**
+ * Check formatting quality of AI response
+ * Returns score based on presence of required formatting elements
+ */
+const checkFormattingQuality = (text) => {
+    if (!text) return { score: 0, details: {} };
+
+    const hasMainTitle = /###\s+.+/g.test(text);
+    const hasSubtitles = /####\s+.+/g.test(text);
+    const hasBulletPoints = /^[\s]*[-*]\s+.+/gm.test(text);
+    const hasNumberedLists = /^\d+\.\s+.+/gm.test(text);
+    const hasBoldText = /\*\*.+?\*\*/g.test(text);
+    const hasCodeBlocks = /```[\s\S]*?```/g.test(text);
+    const hasInlineCode = /`.+?`/g.test(text);
+    const hasFormulas = /\[.+?\]/g.test(text);
+
+    const titleCount = (text.match(/###\s+.+/g) || []).length;
+    const subtitleCount = (text.match(/####\s+.+/g) || []).length;
+
+    return {
+        score: (hasMainTitle ? 15 : 0) +
+            (hasSubtitles ? 15 : 0) +
+            (hasBulletPoints ? 10 : 0) +
+            (hasNumberedLists ? 10 : 0) +
+            (hasBoldText ? 10 : 0) +
+            (hasCodeBlocks ? 5 : 0) +
+            (hasInlineCode ? 5 : 0) +
+            (hasFormulas ? 5 : 0) +
+            (titleCount >= 1 ? 5 : 0) +
+            (subtitleCount >= 2 ? 10 : 0),
+        details: {
+            hasMainTitle,
+            hasSubtitles,
+            hasBulletPoints,
+            hasNumberedLists,
+            hasBoldText,
+            hasCodeBlocks,
+            hasInlineCode,
+            hasFormulas,
+            titleCount,
+            subtitleCount
+        }
+    };
+};
+
+/**
+ * Calculate comprehensive confidence score based on multiple parameters
+ * Returns final score (0-100) and detailed breakdown
+ */
+const calculateConfidence = (params) => {
+    const {
+        aiConfidence = 85,
+        hasContext = false,
+        hasSelectedText = false,
+        hasVisualContext = false,
+        isVisionMode = false,
+        responseLength = 0,
+        hasFormatting = { score: 0 },
+        contentType = 'text',
+        isVerifiedSource = false
+    } = params;
+
+    // Base score from AI (35% weight for AI, 50% for verified)
+    const aiWeight = isVerifiedSource ? 0.50 : 0.35;
+    const aiScore = Math.min(100, Math.max(0, aiConfidence)) * aiWeight;
+
+    // Context quality score (25% weight)
+    let contextScore = 0;
+    if (hasSelectedText) contextScore += 12; // Specific text selected
+    if (hasContext) contextScore += 8; // General context available
+    if (hasVisualContext) contextScore += 5; // Visual positioning data
+    contextScore = Math.min(25, contextScore);
+
+    // Response quality score (20% weight)
+    let responseScore = 0;
+    if (responseLength >= 400) responseScore = 20;
+    else if (responseLength >= 200) responseScore = 15;
+    else if (responseLength >= 100) responseScore = 10;
+    else responseScore = 5;
+
+    // Formatting quality score (20% weight) - increased for AI to reward "Smart Tutor" structure
+    const formattingScore = (hasFormatting.score / 100) * 20;
+
+    // Verified Source Bonus
+    const sourceBonus = isVerifiedSource ? 10 : 0;
+
+    // Calculate final score
+    const finalScore = Math.round(aiScore + contextScore + responseScore + formattingScore + sourceBonus);
+
+    return {
+        finalScore: Math.min(100, Math.max(0, finalScore)),
+        breakdown: {
+            aiConfidence: {
+                value: Math.round(aiScore / aiWeight),
+                weight: `${aiWeight * 100}%`,
+                contribution: Math.round(aiScore)
+            },
+            contextQuality: {
+                weight: '25%',
+                contribution: Math.round(contextScore)
+            },
+            responseQuality: {
+                weight: '20%',
+                contribution: Math.round(responseScore)
+            },
+            formattingQuality: {
+                weight: '20%',
+                contribution: Math.round(formattingScore)
+            },
+            summary: {
+                totalScore: Math.min(100, Math.max(0, finalScore)),
+                reliability: finalScore >= 85 ? 'High' :
+                    finalScore >= 70 ? 'Good' :
+                        finalScore >= 50 ? 'Moderate' : 'Low'
+            }
+        }
+    };
+};
+
+// Helper to get embeddings from ML service (Rule 1)
+const getEmbedding = async (text) => {
+    try {
+        const response = await axios.post('http://localhost:8000/embeddings', { text });
+        return response.data.success ? response.data.embedding : null;
+    } catch (error) {
+        console.warn('Embedding service unavailable:', error.message);
+        return null;
+    }
+};
+
+/**
+ * Search Knowledge Graph for semantic match (Rule 1 & 2)
+ */
+export const searchKnowledgeGraph = async (query, courseId = null, context = '') => {
+    try {
+        // Rule 1: Prioritize selectedText for semantic search if present
+        let searchPhrase = query;
+        const isAnalyzeRequest = query.toLowerCase().includes('analyze') || query.toLowerCase().includes('explain');
+        const isShortQuery = query.split(' ').length < 5;
+
+        if ((isAnalyzeRequest || isShortQuery) && context && context.length > 5) {
+            // If the query is vague, the selectedText (context) becomes the primary search driver
+            // Filter out UI placeholders from context
+            const cleanContext = context.replace(/\(Visual Scan.*?\)/g, '').replace(/\(Video Focus.*?\)/g, '').trim();
+            searchPhrase = (query.length < 10) ? cleanContext : `${query}: ${cleanContext}`;
+        } else if (context && context.length > 5) {
+            // Combine moderate query with context
+            searchPhrase = `${query} (context: ${context.substring(0, 150)})`;
+        }
+
+        const embedding = await getEmbedding(searchPhrase.substring(0, 500));
+        if (!embedding) return { match: false, confidence: 0 };
+
+        // Neo4j Vector Search
+        // We prioritize course-specific matches but allow global matches with higher score
+        const cypher = `
+            CALL db.index.vector.queryNodes('doubt_vector_index', 5, $embedding)
+            YIELD node, score
+            WHERE score >= 0.85
+            MATCH (node)-[:ANSWERS]->(a:Answer)
+            OPTIONAL MATCH (node)-[:RELATES_TO]->(c:Course {id: $courseId})
+            RETURN node.text as question, a.text as answer, score * 100 as confidence, (c IS NOT NULL) as isSameCourse
+            ORDER BY isSameCourse DESC, score DESC LIMIT 1
+        `;
+
+        const result = await runNeo4jQuery(cypher, { embedding, courseId });
+        if (result.records.length > 0) {
+            const record = result.records[0];
+            return {
+                match: true,
+                question: record.get('question'),
+                answer: record.get('answer'),
+                confidence: record.get('confidence'),
+                source: 'KNOWLEDGE_GRAPH'
+            };
+        }
+        return { match: false, confidence: 0 };
+    } catch (error) {
+        console.warn('Knowledge Graph search failed:', error.message);
+        return { match: false, confidence: 0 };
+    }
+};
 
 export const searchExistingDoubts = async (query, context = '', contentId = null) => {
     try {
@@ -57,86 +240,198 @@ export const searchExistingDoubts = async (query, context = '', contentId = null
 
 /**
  * Call Groq Llama to answer a doubt
- * @param {string} query - The student's question
- * @param {string} context - Selection text or content context
- * @param {Object} visualContext - Coordinates {x, y, width, height}
- * @returns {Promise<Object>} - AI response with confidence
  */
-export const askGroq = async (query, context = '', visualContext = null, contentUrl = null, contentType = null) => {
+/**
+ * Save high-confidence resolution to Knowledge Graph (Rule 3 & 5)
+ */
+export const saveToKnowledgeGraph = async (params) => {
+    const { query, answer, confidence, courseId, contentId, context, selectedText } = params;
+
+    // Confidence threshold check (Rule 3)
+    if (confidence < 80) return null;
+
+    try {
+        const embedding = await getEmbedding(query);
+        if (!embedding) return null;
+
+        const cypher = `
+            MERGE (q:Question {text: $query})
+            SET q.embedding = $embedding, q.timestamp = datetime()
+            
+            MERGE (a:Answer {text: $answer})
+            SET a.confidence = $confidence, a.source = "AI_GENERATED", a.timestamp = datetime()
+            
+            MERGE (q)-[:ANSWERS]->(a)
+            
+            WITH q, a
+            MATCH (c:Course {id: $courseId})
+            MERGE (q)-[:RELATES_TO]->(c)
+            
+            // Link to specific content resource if available
+            WITH q, a, c
+            MATCH (r:Content {id: $contentId})
+            MERGE (q)-[:GENERATED_FROM_RESOURCE]->(r)
+
+            // Auto-detect concepts (Basic simulation - Rule 5)
+            WITH q, c
+            UNWIND split($query, ' ') as word
+            WITH q, c, word
+            WHERE size(word) > 5
+            MERGE (con:Concept {name: apoc.text.capitalize(word)})
+            MERGE (q)-[:RELATES_TO]->(con)
+            MERGE (con)-[:PART_OF]->(c)
+            
+            RETURN q.text as saved
+        `;
+
+        await runNeo4jQuery(cypher, {
+            query,
+            answer,
+            confidence,
+            embedding,
+            courseId,
+            contentId: contentId || '',
+            context: context || '',
+            selectedText: selectedText || ''
+        });
+
+        console.log(`Resolution saved to Knowledge Graph (Confidence: ${confidence}%)`);
+        return true;
+    } catch (error) {
+        console.warn('Failed to save to Knowledge Graph:', error.message);
+        return false;
+    }
+};
+
+export const askGroq = async (query, context = '', visualContext = null, contentUrl = null, contentType = null, language = 'english', userName = 'Student', selectedText = '', userKey = null) => {
     try {
         let spatialInfo = '';
         let isVisionMode = false;
-        let activeModel = GROQ_MODEL;
+        const activeApiKey = userKey || GROQ_API_KEY;
 
-        // Determine if we should use Vision mode
-        const isYouTube = contentUrl?.includes('youtube.com') || contentUrl?.includes('youtu.be');
+        if (!activeApiKey) {
+            throw new Error('NO_API_KEY');
+        }
 
-        // Use vision if:
-        // 1. It's an image
-        // 2. It's a visual focus region AND we aren't restricted (like YouTube where we can't directly fetch frames yet)
-        if (visualContext && (contentType === 'image' || (!context.includes('Video Focus') && !context.includes('Text Extraction failed')))) {
-            // TEMPORARY FIX: Disabling vision mode as both 90b and 11b vision previews are unstable/decommissioned.
-            // Falling back to text-based analysis with spatial context prompts.
-            // if (!isYouTube && contentType !== 'video') {
-            //     isVisionMode = true; 
-            //     activeModel = 'llama-3.2-11b-vision-preview'; 
-
-            //     // If it's a PDF, we need to transform it to an image for Cloudinary
-            //     if (contentType === 'pdf' && contentUrl?.includes('cloudinary')) {
-            //         contentUrl = contentUrl.replace(/\.pdf$/, '.jpg');
-            //     }
-            // }
-            isVisionMode = false;
+        if (visualContext && contentUrl && contentType === 'image') {
+            // Enable vision mode for region-specific visual queries on images
+            isVisionMode = true;
         }
 
         if (visualContext) {
-            const timeContext = context.match(/\[at \d+:\d+\]/);
-            spatialInfo = `\nSTUDENT HAS HIGHLIGHTED A SPECIFIC FOCUS REGION ${timeContext ? `IN THE VIDEO ${timeContext[0]}` : ''}. 
-${isVisionMode ? 'WE ARE USING VISION CAPABILITIES TO SEE THE AREA.' : 'ACT AS A GUIDE BY ANALYZING THE SPATIAL CONTEXT AND TEMPORAL POSITION.'}
-Please provide a direct explanation about THIS specific focus area. 
-IMPORTANT: DO NOT mention technical details like coordinates, x/y values, width, height, or "focus region" in your response. 
-Act as if you can see what they are looking at and explain it naturally based on the content context.`;
+            spatialInfo = `\n### CRITICAL CONTEXT: REGION OF INTEREST (ROI)
+The student has MANUALLY HIGHLIGHTED a specific area on their screen. 
+YOUR MISSION: Analyze and explain the contents of this SPECIFIC HIGHLIGHTED area in detail. 
+Explain visual elements, nodes, diagrams, or components shown in that exact region. 
+Act as if you are pointing your finger at that box and teaching the student about its specific contents.`;
         }
 
-        const systemPrompt = `You are an expert academic tutor on the Eta OTT platform. 
-Your goal is to explain concepts clearly, simply, and "like a human teacher".
-Use a warm, encouraging tone. 
+        const activeModel = isVisionMode ? (process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview') : (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile');
 
-CRITICAL INSTRUCTIONS:
-1. RESPONSE FORMAT: You must return a SINGLE VALID JSON OBJECT with exactly two fields: "explanation" and "confidence".
-   - Example: {"explanation": "Your explanation here...", "confidence": 90}
-2. In the "explanation" field:
-   - IT MUST BE A SINGLE, VALID JSON STRING.
-   - You MUST properly escape all special characters, especially double quotes (") and newlines (\\n) within the string.
-   - FORMATTING IS MANDATORY: Use Markdown inside the string. 
-     * **BOLD** key concepts and important terms using double asterisks (e.g., **Key Term**).
-     * Use bullet points for lists.
-     * Use numbered lists for steps.
-   - Do NOT mention anything about coordinates, bounding boxes, or technical selection data.
-   - Speak fluently. Use natural tutoring language.
-   - Focus strictly on answering the student's doubt using the provided context.
-   - If the student has selected a specific area, prioritize that information.
+        // Detect simple greetings or short conversational queries
+        const isGreeting = /^(hi|hello|hey|namaste|hola|good morning|good afternoon|good evening|yo|who are you|what is your name)/i.test(query.toLowerCase().trim());
+        const isVagueExplain = /^(explain|analyze|samajhao|samjhao|batao|kya hai|what is this|explain this|analyze this|tell me about it|samajh nhi aa rha|samajh nahi aa raha)$/i.test(query.toLowerCase().trim());
+        const hasSelection = !!selectedText || !!visualContext;
 
-3. CONFIDENCE SCORE CALCULATION (0-100):
-   - **Step 1: Context Check**: Does the user's question relate to the provided 'Selection Context' below?
-     * YES, and the answer is IN the text -> Score: 90-100
-     * YES, but I need to use outside knowledge to explain fully -> Score: 80-89
-     * SOMEWHAT, it's a related topic but not in the text -> Score: 60-75
-     * NO, the question is completely unrelated to the selection -> Score: < 50 (WARN USER)
+        // Clean context for display (don't show raw text dumps in greetings)
+        const displayContext = (context && context.length < 50) ? context : "is resource";
 
-   - **Step 2: Penalties**:
-     * If the extracted text is garbled or empty: Max Score = 60
-     * If you are guessing: Max Score = 40
+        // If it's a greeting, keep it brief and helpful
+        if (isGreeting && query.length < 20) {
+            return {
+                explanation: `[[INTRO]] \nNamaste ${userName}! \n\nMain aapka AI Tutor hoon. Aap abhi **${displayContext}** dekh rahe hain. \n\nAap is resource mein se koi bhi part select kar sakte hain (using the pencil icon) ya mujhse directly doubts pooch sakte hain. \n\nMain aapki kaise madad kar sakta hoon? 🚀`,
+                confidence: 100,
+                source: 'system_response',
+                isConversational: true
+            };
+        }
 
-   - **Step 3: Final Output**: Return the calculated integer.
+        // Check for "explain" requests without selection - ONLY if they are vague
+        if (isVagueExplain && !hasSelection) {
+            return {
+                explanation: `[[INTRO]] \nJarur ${userName}! \n\nMain aapko **${displayContext}** ke baare mein explain kar sakta hoon. \n\n### Please Select an Area first 📝 \n\nBeheter explanation ke liye, kripya screen par **pencil icon** par click karein aur us area ko highlight karein jiske baare mein aap pooch rahe hain. \n\nJaise hi aap select karenge, main us specific part ko details ke saath samjha dunga!`,
+                confidence: 90,
+                source: 'system_response',
+                isConversational: true
+            };
+        }
 
-Selection Context: ${context}${spatialInfo}`;
+        // Advanced Language Detection & Instruction (Rule 9/11)
+        const hindiKeywords = /hindi|samajha|batao|kaise|kya|kyun|hindi|hinglish|karo|do|kaun|kab|apka|tumhara|aap|hai|hoon|tha|the|thi/i;
+        const isHindiDetected = hindiKeywords.test(query) || language.toLowerCase() === 'hindi';
+        const detectedLanguage = isHindiDetected ? 'hindi' : 'english';
+
+        let languageInstruction = "";
+        if (detectedLanguage === 'hindi') {
+            languageInstruction = `
+- **LANGUAGE**: STRICT HINGLISH ONLY (Hindi words written in English script).
+- **CRITICAL**: Use Hindi vocabulary but ONLY Latin letters. Absolutely NO Devanagari (हिंदी नहीं).
+- **TONE**: Natural, conversational, and direct "Aap" style.
+- **STYLE**: Explain complex concepts using everyday Hinglish analogies (e.g., "Jaise auto-pilot kaam karta hai...").
+- **ABSOLUTELY NO ENGLISH WORDS**: Use Hindi vocabulary exclusively. Example: "computer" → "computer", "network" → "network" (technical terms can stay), but "understand" → "samajhna", "explain" → "samjhana".
+- **CONSISTENCY**: Every sentence must be in Hinglish. No switching to English mid-response.`;
+        } else {
+            languageInstruction = `
+- **LANGUAGE**: FULL PROFESSIONAL ENGLISH ONLY.
+- **CRITICAL**: No Hinglish mixing, no "smjha?", no "batao", no Hindi words at all.
+- **TONE**: Senior Academic Mentor. Precise and technical.
+- **CONSISTENCY**: Every sentence must be in pure English. No code-switching to Hindi/Hinglish.`;
+        }
+
+        const isStrictRegion = context.startsWith('STRICT_REGION_CONTEXT:');
+        let systemPrompt = "";
+
+        // Intelligence check for query type
+        const isCodingQuery = /code|programming|java|python|javascript|script|algorithm|function|class/i.test(query) || /code|programming/i.test(selectedText);
+        const isExplicitCodeRequest = /show\s+code|example\s+in|write\s+a\s+program|snippet/i.test(query);
+
+        if (isStrictRegion) {
+            const rawGrounding = context.replace('STRICT_REGION_CONTEXT: ', '');
+            let gc = { transcriptSegment: '', selectedTimestamp: '', courseContext: '', facultyResources: '' };
+            try { gc = JSON.parse(rawGrounding); } catch (e) { }
+
+            systemPrompt = `You are an expert precision tutor. The student is focusing on a SPECIFIC visual region or concept from the resource.
+
+[[CONCEPT]] 
+Start directly with a professional explanation. 
+- Primary focus: The highlighted region/concept.
+- Use the provided context: "${gc.transcriptSegment}".
+- Ground your analysis in ${gc.courseContext} and the actual resource content.
+- If the specific regional data is thin, use your knowledge of the overall resource (${gc.facultyResources}) to provide a helpful, relevant explanation.
+- NO MENTION of timestamps, frame numbers, or technical metadata.
+- AVOID VAGUE GUESSING. Use the provided transcript and resource text to be precise.
+
+STRICT: No greetings. No intro fluff. Start directly with the core explanation. No summary headings.`;
+        } else {
+            // Adaptive General Prompt
+            systemPrompt = `You are a high-speed professional academic mentor. Provide a direct, crystal-clear response.
+
+LANGUAGE RULES:
+${languageInstruction}
+
+ADAPTIVE STRUCTURE:
+[[INTRO]] -> [[CONCEPT]] -> [[CODE]] -> [[SUMMARY]]
+- **DIRECT START**: Start the answer immediately. Skip long "I can help with that" preambles.
+- **EXPLANATION**: Provide a direct explanation grounded in ${selectedText || context || 'General curriculum'}. Use analogies to make it "click" instantly.
+- **NO TIMESTAMPS**: Never mention time/frame references.
+- **FACTS ONLY**: No "likely" or "probably". Be confident based on the provided material.
+
+CRITICAL CONSTRAINTS:
+- **STRICT: FIRST-STRIKE ANSWERS**. The first sentence must be the core answer or a direct response to the query.
+- **CONSTRUCTION**: Use extracted transcript, OCR text, and faculty resources. 
+- **NO UI NOISE**: Do not mention confidence, markers, or metadata.
+- **STRICT: NO URLs IN TEXT**.
+- Use ### for Section Headers.
+- Use ${userName}'s name once in the greeting.
+
+TABLE FORMATTING:
+- Use markdown tables for comparisons or structured data.`;
+        }
 
         const messages = [];
 
         if (isVisionMode && contentUrl) {
             try {
-                // Fetch image and convert to Base64 for maximum reliability
                 const imageResponse = await axios.get(contentUrl, { responseType: 'arraybuffer' });
                 const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
                 const mimeType = contentUrl.endsWith('.png') ? 'image/png' : 'image/jpeg';
@@ -152,111 +447,80 @@ Selection Context: ${context}${spatialInfo}`;
                     ]
                 });
             } catch (imgError) {
-                console.warn('Failed to encode image for vision, falling back to URL:', imgError.message);
-                messages.push({
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: systemPrompt + "\n\nACTUAL STUDENT QUERY: " + query },
-                        { type: 'image_url', image_url: { url: contentUrl } }
-                    ]
-                });
+                console.warn('Failed to encode image for vision:', imgError.message);
+                messages.push({ role: 'system', content: systemPrompt });
+                messages.push({ role: 'user', content: query });
             }
         } else {
             messages.push({ role: 'system', content: systemPrompt });
             messages.push({ role: 'user', content: query });
         }
 
-        const payload = {
-            model: activeModel,
-            messages: messages,
-            temperature: 0.5 // Lower temperature for more deterministic scoring
-        };
-
-        // Removed strict response_format: { type: 'json_object' } to prevent 400 errors on minor syntax glitches.
-        // Our manual parsing logic below is robust enough to handle raw text or slightly malformed JSON.
-
         const response = await axios.post(
             GROQ_API_URL,
-            payload,
+            {
+                model: isVisionMode ? (process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview') : GROQ_MODEL,
+                messages: messages,
+                temperature: 0.6,
+                max_tokens: 2048
+            },
             {
                 headers: {
-                    'Authorization': `Bearer ${GROQ_API_KEY} `,
+                    'Authorization': `Bearer ${activeApiKey}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 30000
             }
-        );
+        ).catch(err => {
+            if (err.response?.status === 413 || err.response?.status === 429) {
+                throw new Error('API_LIMIT_REACHED');
+            }
+            if (err.response?.status === 401) {
+                throw new Error('INVALID_API_KEY');
+            }
+            throw err;
+        });
 
-        let aiContent;
         const rawContent = response.data.choices[0].message.content;
+        const hasFormatting = checkFormattingQuality(rawContent);
 
-        try {
-            // Attempt standard parse first
-            aiContent = JSON.parse(rawContent);
-        } catch (e) {
-            // Fallback 1: Extract JSON from markdown code blocks or curly braces
-            let jsonString = rawContent.match(/\{[\s\S]*\}/)?.[0];
-
-            if (jsonString) {
-                try {
-                    // Fix potential trailing commas before closing braces (common LLM error)
-                    jsonString = jsonString.replace(/,\s*}/g, '}');
-                    aiContent = JSON.parse(jsonString);
-                } catch (innerE) {
-                    // Fallback 2: If parsing still fails, treat it as raw text
-                    console.warn('JSON parse failed for AI response, using raw text fallback.');
-                    aiContent = { explanation: rawContent, confidence: 65 };
-                }
-            } else {
-                aiContent = { explanation: rawContent, confidence: 65 };
-            }
-        }
-
-        // Normalize confidence to 0-100 if it came back as 0-1
-        let finalConfidence = aiContent.confidence || 90;
-        if (finalConfidence > 0 && finalConfidence <= 1) {
-            finalConfidence *= 100;
-        }
+        // Calculate dynamic confidence score (Rule 7)
+        const confidenceResult = calculateConfidence({
+            aiConfidence: 85, // Base assumption for 70b-versatile
+            hasContext: !!context,
+            hasSelectedText: !!selectedText,
+            hasVisualContext: !!visualContext,
+            isVisionMode,
+            responseLength: rawContent.length,
+            hasFormatting,
+            contentType
+        });
 
         return {
-            explanation: aiContent.explanation || aiContent.text || rawContent,
-            confidence: Math.round(finalConfidence),
+            explanation: rawContent,
+            confidence: confidenceResult.finalScore,
+            confidenceBreakdown: confidenceResult.breakdown,
             source: isVisionMode ? 'groq_vision' : 'groq_llama'
         };
     } catch (error) {
-        if (error.response) {
-            console.error('Groq API Error Details:', JSON.stringify(error.response.data, null, 2));
-        }
         console.error('Groq AI call failed:', error.message);
-        throw new Error('AI Tutor is currently unavailable. Please try again later.');
+        throw new Error('AI Tutor is currently unavailable.');
     }
 };
 
-/**
- * Save a high-confidence doubt to Graph DB
- */
 export const saveDoubtToGraph = async (query, answer, confidence, context = '', contentId = null) => {
     try {
-        const queryKey = `${query.toLowerCase().trim()}${context ? '|' + context.toLowerCase().trim() : ''} `;
-
-        // Create/Update Doubt Node
+        const queryKey = `${query.toLowerCase().trim()}${context ? '|' + context.toLowerCase().trim() : ''}`;
         await runNeo4jQuery(
             `MERGE(d: Doubt { queryKey: $queryKey })
              SET d.query = $query, d.context = $context, d.answer = $answer,
-            d.confidence = $confidence, d.updatedAt = datetime()
+                 d.confidence = $confidence, d.updatedAt = datetime()
              WITH d
-             // If contentId provided, link it to the Content node
              OPTIONAL MATCH(c: Content { id: $contentId })
-        FOREACH(ignoreMe IN CASE WHEN c IS NOT NULL THEN[1] ELSE[] END |
-            MERGE(d) - [: RELATES_TO] -> (c)
-        )`,
-            {
-                queryKey,
-                query: query.trim(),
-                context: context.trim(),
-                answer,
-                confidence,
-                contentId
-            }
+             FOREACH(ignoreMe IN CASE WHEN c IS NOT NULL THEN [1] ELSE [] END |
+                 MERGE(d)-[:RELATES_TO]->(c)
+             )`,
+            { queryKey, query: query.trim(), context: context.trim(), answer, confidence, contentId }
         );
     } catch (error) {
         console.error('Error saving doubt to graph:', error);
@@ -266,5 +530,7 @@ export const saveDoubtToGraph = async (query, answer, confidence, context = '', 
 export default {
     searchExistingDoubts,
     askGroq,
-    saveDoubtToGraph
+    saveDoubtToGraph,
+    searchKnowledgeGraph,
+    saveToKnowledgeGraph
 };

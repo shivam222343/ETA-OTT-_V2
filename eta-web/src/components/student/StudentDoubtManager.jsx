@@ -2,13 +2,16 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Clock, CheckCircle2, AlertCircle, User, Bot, BookOpen, Search, Filter } from 'lucide-react';
 import apiClient from '../../api/axios.config';
-import { useSocket } from '../../hooks/useSocket';
+import { useSocket } from '../../contexts/SocketContext';
 
 export default function StudentDoubtManager() {
     const [doubts, setDoubts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('all');
     const socket = useSocket();
+    const [expandedAI, setExpandedAI] = useState({});
+    const [expandedMentor, setExpandedMentor] = useState({});
+    const [expandedText, setExpandedText] = useState({});
 
     useEffect(() => {
         fetchMyDoubts();
@@ -46,7 +49,7 @@ export default function StudentDoubtManager() {
         setLoading(true);
         try {
             const response = await apiClient.get('/doubts/my-doubts');
-            setDoubts(response.data.data.doubts);
+            setDoubts(response.data.data.doubts || []);
         } catch (error) {
             console.error('Fetch doubts error:', error);
         } finally {
@@ -126,10 +129,10 @@ export default function StudentDoubtManager() {
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${doubt.status === 'answered' || doubt.status === 'resolved'
-                                                    ? 'bg-green-500/10 text-green-500'
-                                                    : doubt.status === 'escalated'
-                                                        ? 'bg-orange-500/10 text-orange-500'
-                                                        : 'bg-secondary text-muted-foreground'
+                                                ? 'bg-green-500/10 text-green-500'
+                                                : doubt.status === 'escalated'
+                                                    ? 'bg-orange-500/10 text-orange-500'
+                                                    : 'bg-secondary text-muted-foreground'
                                                 }`}>
                                                 {doubt.status}
                                             </span>
@@ -148,15 +151,46 @@ export default function StudentDoubtManager() {
                                     </div>
                                 </div>
 
+                                {/* Context Section */}
+                                {doubt.selectedText && (
+                                    <div className="mb-4">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                                                <Filter className="w-2.5 h-2.5" />
+                                                Selected Area
+                                            </div>
+                                            {doubt.selectedText.length > 120 && (
+                                                <button
+                                                    onClick={() => setExpandedText(prev => ({ ...prev, [doubt._id]: !prev[doubt._id] }))}
+                                                    className="text-[9px] font-bold text-primary uppercase hover:underline"
+                                                >
+                                                    {expandedText[doubt._id] ? 'Less' : 'More'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className={`p-2 bg-secondary/20 rounded-lg text-[11px] text-muted-foreground border-l-2 border-primary/30 whitespace-pre-wrap ${!expandedText[doubt._id] && 'line-clamp-2'}`}>
+                                            {doubt.selectedText}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* AI Response Section */}
                                 {doubt.aiResponse && (
                                     <div className="bg-secondary/30 rounded-xl p-4 mb-4 border border-border/50 text-xs">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Bot className="w-4 h-4 text-primary" />
                                             <span className="font-bold text-primary uppercase tracking-widest">AI Tutor Response</span>
+                                            {doubt.aiResponse.length > 200 && (
+                                                <button
+                                                    onClick={() => setExpandedAI(prev => ({ ...prev, [doubt._id]: !prev[doubt._id] }))}
+                                                    className="text-[10px] text-primary font-black uppercase hover:underline ml-2"
+                                                >
+                                                    {expandedAI[doubt._id] ? 'Show Less' : 'View More'}
+                                                </button>
+                                            )}
                                             <span className="text-[10px] text-muted-foreground ml-auto">{doubt.confidence}% Confidence</span>
                                         </div>
-                                        <p className="text-muted-foreground leading-relaxed">{doubt.aiResponse}</p>
+                                        <p className={`text-muted-foreground leading-relaxed whitespace-pre-wrap ${!expandedAI[doubt._id] && 'line-clamp-3'}`}>{doubt.aiResponse}</p>
                                     </div>
                                 )}
 
@@ -167,11 +201,21 @@ export default function StudentDoubtManager() {
                                         animate={{ height: 'auto', opacity: 1 }}
                                         className="bg-primary/5 rounded-xl p-4 border border-primary/10 overflow-hidden"
                                     >
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <User className="w-4 h-4 text-primary" />
-                                            <span className="font-bold text-primary uppercase tracking-widest text-xs">Verified Expert Answer</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <User className="w-4 h-4 text-primary" />
+                                                <span className="font-bold text-primary uppercase tracking-widest text-xs">Verified Expert Answer</span>
+                                            </div>
+                                            {(doubt.facultyAnswer || '').length > 150 && (
+                                                <button
+                                                    onClick={() => setExpandedMentor(prev => ({ ...prev, [doubt._id]: !prev[doubt._id] }))}
+                                                    className="text-[9px] font-black text-primary uppercase hover:underline"
+                                                >
+                                                    {expandedMentor[doubt._id] ? 'Show Less' : 'View More'}
+                                                </button>
+                                            )}
                                         </div>
-                                        <p className="text-sm font-medium leading-relaxed italic border-l-2 border-primary/30 pl-3">
+                                        <p className={`text-sm font-medium leading-relaxed italic border-l-2 border-primary/30 pl-3 whitespace-pre-wrap ${!expandedMentor[doubt._id] && 'line-clamp-3'}`}>
                                             "{doubt.facultyAnswer}"
                                         </p>
                                     </motion.div>

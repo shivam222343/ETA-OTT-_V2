@@ -36,7 +36,9 @@ export default function InstitutionCard({ institution, onEdit, onDelete, onManag
                         </div>
                     )}
                     <div>
-                        <h3 className="text-lg font-semibold">{institution.name}</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold">{institution.name}</h3>
+                        </div>
                         <p className="text-xs text-muted-foreground">
                             Created {new Date(institution.createdAt).toLocaleDateString()}
                         </p>
