@@ -371,10 +371,94 @@ export default function StudentDashboard() {
                         )}
 
                         {activeTab === 'dashboard' && (
-                            <div className="space-y-8">
+                            <div className="space-y-12">
+                                {recentContent.filter(c =>
+                                    c.type === 'video' &&
+                                    c.courseId?.code !== 'YT_DISCOVERY'
+                                ).length > 0 && (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center justify-between border-b border-border/50 pb-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.15)] ring-1 ring-primary/20">
+                                                        <Video className="w-6 h-6" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="text-xl md:text-2xl font-black tracking-tighter">Recently Uploaded Course Videos</h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                                            <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Faculty Lectures & Curated Content</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => setActiveTab('content')} className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all text-xs font-bold ring-1 ring-border/50">
+                                                    View Library
+                                                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                                </button>
+                                            </div>
+
+                                            <div className="relative group/scroll">
+                                                <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar -mx-6 px-6 snap-x">
+                                                    {recentContent.filter(c =>
+                                                        c.type === 'video' &&
+                                                        c.courseId?.code !== 'YT_DISCOVERY'
+                                                    ).map((content) => (
+                                                        <motion.div
+                                                            key={content._id}
+                                                            whileHover={{ y: -8 }}
+                                                            className="min-w-[340px] w-[340px] bg-card border border-border rounded-2xl overflow-hidden group cursor-pointer shadow-sm hover:shadow-2xl hover:border-primary/50 transition-all duration-300 snap-start"
+                                                            onClick={() => setSelectedContent(content)}
+                                                        >
+                                                            <div className="relative aspect-video bg-secondary/30">
+                                                                {content.file?.thumbnail?.url ? (
+                                                                    <img src={content.file.thumbnail.url} alt={content.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
+                                                                        {content.file?.format === 'youtube' ? <Youtube className="w-12 h-12 text-red-500/20" /> : <Video className="w-12 h-12 text-primary/20" />}
+                                                                    </div>
+                                                                )}
+                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                    <div className="w-12 h-12 rounded-full bg-white text-primary flex items-center justify-center shadow-lg transition-transform group-hover:scale-110">
+                                                                        <Play className="w-5 h-5 fill-current ml-1" />
+                                                                    </div>
+                                                                </div>
+                                                                <div className={`absolute top-3 left-3 px-2 py-1 rounded-md border text-[9px] font-bold text-white uppercase tracking-wider backdrop-blur-md ${content.file?.format === 'youtube' ? 'bg-red-500/40 border-red-500/20' : 'bg-primary/40 border-primary/20'}`}>
+                                                                    {content.file?.format === 'youtube' ? 'YouTube Resource' : 'Faculty Lecture'}
+                                                                </div>
+                                                                {content.file?.duration && (
+                                                                    <div className="absolute bottom-3 right-3 px-1.5 py-0.5 rounded bg-black/60 text-[9px] font-bold text-white">
+                                                                        {Math.floor(content.file.duration / 60)}:{(content.file.duration % 60).toString().padStart(2, '0')}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="p-4 space-y-4">
+                                                                <div className="space-y-1">
+                                                                    <h5 className="font-bold text-base leading-tight line-clamp-2 group-hover:text-primary transition-colors min-h-[2.5rem]">{content.title}</h5>
+                                                                    <div className="flex items-center gap-1.5 pt-1">
+                                                                        <User className="w-3 h-3 text-primary/60" />
+                                                                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest truncate">
+                                                                            {content.uploadedBy?.profile?.name || 'Academic Library'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center justify-between pt-2 border-t border-border/30">
+                                                                    <div className="flex items-center gap-2 min-w-0">
+                                                                        <BookOpen className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                                                        <p className="text-[11px] text-muted-foreground font-medium truncate uppercase tracking-wider">{content.courseId?.name}</p>
+                                                                    </div>
+                                                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">{new Date(content.createdAt).toLocaleDateString()}</span>
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     {/* Left Column - Enrolled Branches/Courses */}
-                                    <div className="lg:col-span-2 space-y-6">
+                                    <div className="lg:col-span-2 space-y-6 mt-6">
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-xl font-black tracking-tighter flex items-center gap-2">
                                                 <GraduationCap className="w-6 h-6 text-primary" />
@@ -429,7 +513,7 @@ export default function StudentDashboard() {
                                     </div>
 
                                     {/* Right Column - AI Tutoring sidebar */}
-                                    <div className="space-y-6">
+                                    <div className="space-y-6 mt-20">
                                         <div className="bg-secondary/30 rounded-3xl p-6 border border-border space-y-4">
                                             <h4 className="text-sm font-bold flex items-center gap-2">
                                                 <MessageSquare className="w-4 h-4 text-primary" />
@@ -443,238 +527,61 @@ export default function StudentDashboard() {
                                     </div>
                                 </div>
 
-                                {/* Faculty Uploaded Content - Full Width Rows */}
-                                <div className="space-y-12 pt-8">
-                                    {/* Row 01: Faculty Video Lectures (Original Content) */}
-                                    {recentContent.filter(c =>
-                                        c.type === 'video' &&
-                                        c.file?.format !== 'youtube' &&
-                                        c.courseId?.code !== 'YT_DISCOVERY'
-                                    ).length > 0 && (
-                                            <div className="space-y-6">
-                                                <div className="header-dashboard">
-                                                    <div className="header-title-group min-w-0 flex-1">
-                                                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner flex-shrink-0">
-                                                            <Video className="w-6 h-6" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h3 className="text-xl md:text-2xl font-black tracking-tighter truncate">Faculty Video Lectures</h3>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse flex-shrink-0"></span>
-                                                                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest truncate">Row 01 / Original Content</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => setActiveTab('content')} className="group flex items-center gap-2 px-5 py-2.5 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all text-xs font-bold ring-1 ring-border/50 flex-shrink-0">
-                                                        <span className="btn-text">Library</span>
-                                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                                    </button>
+                                {/* Row 03: Study Materials & Docs (Redesigned) */}
+                                {recentContent.filter(c =>
+                                    c.type === 'pdf' &&
+                                    c.courseId?.code !== 'YT_DISCOVERY'
+                                ).length > 0 && (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-4 border-b border-border/50 pb-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-inner">
+                                                    <FileText className="w-6 h-6" />
                                                 </div>
-
-                                                <div className="relative group/scroll">
-                                                    <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar -mx-6 px-6 snap-x">
-                                                        {recentContent.filter(c =>
-                                                            c.type === 'video' &&
-                                                            c.file?.format !== 'youtube' &&
-                                                            c.courseId?.code !== 'YT_DISCOVERY'
-                                                        ).map((content) => (
-                                                            <motion.div
-                                                                key={content._id}
-                                                                whileHover={{ y: -10 }}
-                                                                className="min-w-[360px] w-[360px] bg-card border border-border/80 rounded-[2rem] overflow-hidden group cursor-pointer shadow-sm hover:shadow-2xl hover:shadow-primary/20 hover:border-primary/50 transition-all duration-500 snap-start"
-                                                                onClick={() => setSelectedContent(content)}
-                                                            >
-                                                                <div className="relative aspect-video bg-secondary/30">
-                                                                    {content.file?.thumbnail?.url ? (
-                                                                        <img src={content.file.thumbnail.url} alt={content.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
-                                                                            <Video className="w-16 h-16 text-primary/20" />
-                                                                        </div>
-                                                                    )}
-                                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center backdrop-blur-[1px]">
-                                                                        <div className="w-16 h-16 rounded-full bg-white text-primary flex items-center justify-center shadow-2xl scale-75 group-hover:scale-100 transition-all duration-300">
-                                                                            <Play className="w-7 h-7 fill-current ml-1" />
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-xl border border-white/20 text-[10px] font-black text-white uppercase tracking-widest shadow-xl">
-                                                                        FACULTY ORIGINAL
-                                                                    </div>
-                                                                    {content.file?.duration && (
-                                                                        <div className="absolute bottom-4 right-4 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[10px] font-black text-white border border-white/10">
-                                                                            {Math.floor(content.file.duration / 60)}:{(content.file.duration % 60).toString().padStart(2, '0')}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div className="p-6 space-y-4">
-                                                                    <div className="space-y-2">
-                                                                        <h5 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors tracking-tight">{content.title}</h5>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><BookOpen className="w-3.5 h-3.5" /></div>
-                                                                            <p className="text-xs text-muted-foreground font-bold truncate tracking-tight">{content.courseId?.name}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="pt-5 border-t border-border/40 flex items-center justify-between">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">{new Date(content.createdAt).toLocaleDateString()}</span>
-                                                                            <span className="text-[9px] font-bold text-muted-foreground/40">{new Date(content.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-                                                                            Resume Learning <ArrowRight className="w-3 h-3" />
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </motion.div>
-                                                        ))}
+                                                <div className="min-w-0">
+                                                    <h3 className="text-xl md:text-2xl font-black tracking-tighter">Study Materials & Docs</h3>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                                                        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Academic Repository</p>
                                                     </div>
                                                 </div>
                                             </div>
-                                        )}
 
-                                    {/* Row 02: Course Reference Videos (Academic YouTube Content) */}
-                                    {recentContent.filter(c =>
-                                        c.type === 'video' &&
-                                        c.file?.format === 'youtube' &&
-                                        c.courseId?.code !== 'YT_DISCOVERY'
-                                    ).length > 0 && (
-                                            <div className="space-y-6">
-                                                <div className="header-dashboard">
-                                                    <div className="header-title-group min-w-0 flex-1">
-                                                        <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 shadow-inner flex-shrink-0">
-                                                            <Youtube className="w-6 h-6" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h3 className="text-xl md:text-2xl font-black tracking-tighter truncate">Academic YouTube Resources</h3>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0"></span>
-                                                                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest truncate">Row 02 / Curated Content</p>
+                                            <div className="relative group/scroll">
+                                                <div className="flex gap-4 overflow-x-auto pb-8 no-scrollbar -mx-6 px-6 snap-x">
+                                                    {recentContent.filter(c =>
+                                                        c.type === 'pdf' &&
+                                                        c.courseId?.code !== 'YT_DISCOVERY'
+                                                    ).map((content) => (
+                                                        <motion.div
+                                                            key={content._id}
+                                                            whileHover={{ y: -4 }}
+                                                            className="min-w-[240px] w-[240px] bg-card border border-border rounded-xl group cursor-pointer shadow-sm hover:shadow-md hover:border-orange-500/40 transition-all duration-300 snap-start flex flex-col"
+                                                            onClick={() => setSelectedContent(content)}
+                                                        >
+                                                            <div className="p-4 flex flex-col items-center justify-center aspect-[4/3] bg-secondary/10 border-b border-border/30 rounded-t-xl overflow-hidden">
+                                                                <div className="w-16 h-16 rounded-xl bg-orange-500/5 border border-orange-500/10 flex items-center justify-center mb-3">
+                                                                    <FileText className="w-8 h-8 text-orange-500/40" />
+                                                                </div>
+                                                                <div className="text-[10px] font-black text-orange-500/60 uppercase tracking-widest">Resource</div>
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="relative group/scroll">
-                                                    <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar -mx-6 px-6 snap-x">
-                                                        {recentContent.filter(c =>
-                                                            c.type === 'video' &&
-                                                            c.file?.format === 'youtube' &&
-                                                            c.courseId?.code !== 'YT_DISCOVERY'
-                                                        ).map((content) => (
-                                                            <motion.div
-                                                                key={content._id}
-                                                                whileHover={{ y: -10 }}
-                                                                className="min-w-[320px] w-[320px] bg-card border border-border/80 rounded-[2rem] overflow-hidden group cursor-pointer shadow-sm hover:shadow-2xl hover:shadow-red-500/10 hover:border-red-500/40 transition-all duration-500 snap-start"
-                                                                onClick={() => setSelectedContent(content)}
-                                                            >
-                                                                <div className="relative aspect-video bg-secondary/30">
-                                                                    {content.file?.thumbnail?.url && (
-                                                                        <img src={content.file.thumbnail.url} alt={content.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
-                                                                    )}
-                                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30">
-                                                                            <Play className="w-5 h-5 fill-current" />
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="absolute bottom-3 right-3 px-2 py-1 rounded bg-black/70 text-[9px] font-bold text-white border border-white/10">
-                                                                        YOUTUBE
+                                                            <div className="p-4 flex-1 flex flex-col justify-between">
+                                                                <div className="space-y-2">
+                                                                    <h5 className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-orange-600 transition-colors uppercase italic">{content.title}</h5>
+                                                                    <p className="text-[9px] text-muted-foreground font-bold uppercase truncate">{content.courseId?.name}</p>
+                                                                </div>
+                                                                <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between">
+                                                                    <span className="text-[9px] font-semibold text-muted-foreground">{new Date(content.createdAt).toLocaleDateString()}</span>
+                                                                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-500/10 text-orange-600 text-[8px] font-black uppercase">
+                                                                        {content.file?.size ? (content.file.size / (1024 * 1024)).toFixed(1) + ' MB' : 'PDF'}
                                                                     </div>
                                                                 </div>
-                                                                <div className="p-5 space-y-3">
-                                                                    <h5 className="font-bold text-sm leading-tight line-clamp-2 tracking-tight group-hover:text-red-500 transition-colors uppercase italic">{content.title}</h5>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest bg-secondary px-2 py-0.5 rounded-full">{content.courseId?.name}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </motion.div>
-                                                        ))}
-                                                    </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    ))}
                                                 </div>
                                             </div>
-                                        )}
-
-                                    {/* Faculty Documents Row */}
-                                    {recentContent.filter(c =>
-                                        c.type === 'pdf' &&
-                                        c.courseId?.code !== 'YT_DISCOVERY'
-                                    ).length > 0 && (
-                                            <div className="space-y-6">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-inner">
-                                                            <FileText className="w-6 h-6" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h3 className="text-xl md:text-2xl font-black tracking-tighter truncate">Study Materials & Docs</h3>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0"></span>
-                                                                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest truncate">Row 03 / Academic Repository</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="relative group/scroll">
-                                                    <div className="flex gap-6 overflow-x-auto pb-8 no-scrollbar -mx-6 px-6 snap-x">
-                                                        {recentContent.filter(c =>
-                                                            c.type === 'pdf' &&
-                                                            c.courseId?.code !== 'YT_DISCOVERY'
-                                                        ).map((content) => (
-                                                            <motion.div
-                                                                key={content._id}
-                                                                whileHover={{ y: -8, scale: 1.02 }}
-                                                                className="min-w-[280px] w-[280px] bg-card border border-border/80 rounded-[2rem] overflow-hidden group cursor-pointer shadow-sm hover:shadow-2xl hover:shadow-orange-500/20 hover:border-orange-500/40 transition-all duration-500 snap-start"
-                                                                onClick={() => setSelectedContent(content)}
-                                                            >
-                                                                <div className="relative aspect-[3/4] bg-secondary/20">
-                                                                    {content.file?.thumbnail?.url ? (
-                                                                        <img src={content.file.thumbnail.url} alt={content.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex flex-col items-center justify-center p-10 text-center gap-6 bg-gradient-to-b from-orange-500/5 to-transparent">
-                                                                            <div className="w-20 h-20 rounded-3xl bg-orange-500/5 border border-orange-500/10 flex items-center justify-center shadow-inner">
-                                                                                <FileText className="w-10 h-10 text-orange-500/30" />
-                                                                            </div>
-                                                                            <div className="space-y-2">
-                                                                                <span className="text-[10px] font-black text-orange-500/40 uppercase tracking-[0.2em]">Resource</span>
-                                                                                <span className="text-xs text-muted-foreground font-bold line-clamp-3 block">{content.title}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                    <div className="absolute inset-0 bg-orange-500/5 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-end p-8 backdrop-blur-[1px]">
-                                                                        <div className="w-full py-4 rounded-[1.25rem] bg-orange-500 text-white text-xs font-black shadow-2xl shadow-orange-500/40 flex items-center justify-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300">
-                                                                            Open Study Material
-                                                                            <ArrowRight className="w-4 h-4" />
-                                                                        </div>
-                                                                    </div>
-                                                                    {content.file?.pages && (
-                                                                        <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md text-[10px] font-black text-white border border-white/10 shadow-lg">
-                                                                            {content.file.pages} SHEETS
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div className="p-6 space-y-4">
-                                                                    <div className="space-y-2">
-                                                                        <h5 className="font-bold text-[15px] leading-snug line-clamp-2 group-hover:text-orange-500 transition-colors tracking-tight">{content.title}</h5>
-                                                                        <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest opacity-60 flex items-center gap-2 italic">
-                                                                            <div className="w-1 h-3 bg-orange-500/40 rounded-full" />
-                                                                            {content.courseId?.name}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="pt-4 border-t border-border/30 flex items-center justify-between">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-[9px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">{new Date(content.createdAt).toLocaleDateString()}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-500 text-[9px] font-black tracking-widest uppercase">
-                                                                            {content.file?.size ? (content.file.size / (1024 * 1024)).toFixed(1) + ' MB' : 'PDF DOC'}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </motion.div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                </div>
+                                        </div>
+                                    )}
                             </div>
                         )}
 

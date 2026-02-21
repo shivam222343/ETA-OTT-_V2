@@ -73,6 +73,10 @@ def extract_youtube(video_url):
         'no_warnings': True,
         'nocheckcertificate': True,
         'cookiefile': cookies_path,
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['en.*'],
+        'skip_download': False,
         # Updated to bypass aggressive bot detection
         'extractor_args': {
             'youtube': {
@@ -94,19 +98,42 @@ def extract_youtube(video_url):
     try:
         # 1. Extract metadata and download audio
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print(f"📥 Downloading YouTube audio for job {job_id}...")
+            print(f"📥 Downloading YouTube metadata/audio for job {job_id}...")
             info = ydl.extract_info(video_url, download=True)
             video_id = info['id']
             audio_path = os.path.join(job_dir, f"{video_id}.mp3")
             
-            # Verify file exists (sometimes postprocessors fail silently)
-            if not os.path.exists(audio_path):
-                # Check for alternative extensions if ffmpeg failed to rename
-                fallback_files = [f for f in os.listdir(job_dir) if f.startswith(video_id)]
-                if fallback_files:
-                    audio_path = os.path.join(job_dir, fallback_files[0])
-                else:
-                    raise FileNotFoundError(f"Audio file not found at {audio_path}")
+            # Check for subtitles first
+            subtitles = info.get('requested_subtitles')
+            subs_text = None
+            
+            if subtitles:
+                print(f"📄 Found available subtitles for {video_id}, attempting to use them...")
+                # Find the downloaded subtitle file
+                # yt-dlp downloads them with .vtt or .srt extension
+                for file in os.listdir(job_dir):
+                    if (file.endswith('.vtt') or file.endswith('.srt')) and video_id in file:
+                        sub_file_path = os.path.join(job_dir, file)
+                        try:
+                            with open(sub_file_path, 'r', encoding='utf-8') as f:
+                                # Simple VTT/SRT parsing or just cleaning up
+                                content = f.read()
+                                # Extremely crude way to get just text (better than nothing)
+                                import re
+                                # Remove timestamps and metadata
+                                content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}', '', content)
+                                content = re.sub(r'<[^>]*>', '', content)
+                                content = re.sub(r'WEBVTT|Kind:.*|Language:.*', '', content)
+                                # Remove line numbers (for SRT)
+                                content = re.sub(r'^\d+$', '', content, flags=re.MULTILINE)
+                                # Clean up extra whitespace
+                                lines = [line.strip() for line in content.split('\n') if line.strip()]
+                                subs_text = ' '.join(lines)
+                                if len(subs_text) > 50: # Ensure we actually got something
+                                    print(f"✅ Successfully extracted {len(subs_text)} chars from YouTube subtitles.")
+                                    break
+                        except Exception as sub_e:
+                            print(f"⚠️ Subtitle parsing failed: {sub_e}")
 
             metadata = {
                 "title": info.get('title'),
@@ -118,11 +145,43 @@ def extract_youtube(video_url):
                 "youtube_id": info.get('id')
             }
 
-        # 2. Transcribe with Whisper
-        from model_loader import get_whisper_model
+        # 2. Transcribe only if subtitles weren't found
+        if subs_text:
+            return {
+                "success": True,
+                "metadata": metadata,
+                "text": subs_text,
+                "segments": [{"text": subs_text, "start": 0, "end": metadata.get("duration", 0)}],
+                "language": "en",
+                "summary": subs_text[:500] + "..." if len(subs_text) > 500 else subs_text,
+                "thumbnail_url": metadata.get("thumbnail"),
+                "thumbnail_public_id": "youtube",
+                "extracted_from": "youtube_subtitles"
+            }
+
+        # 2. Transcribe with Whisper (Fallback)
+        from model_loader import get_whisper_model, get_whisper_lock
         whisper_model = get_whisper_model()
-        print(f"🎙️ Transcribing {job_id}: {metadata['title']}")
-        result = whisper_model.transcribe(audio_path, fp16=False)
+        whisper_lock = get_whisper_lock()
+        
+        # Verify audio file integrity before transcription
+        if not os.path.exists(audio_path):
+            # Check for alternative extensions
+            fallback_files = [f for f in os.listdir(job_dir) if f.startswith(video_id) and f.endswith(('.mp3', '.m4a', '.wav', '.webm'))]
+            if fallback_files:
+                audio_path = os.path.join(job_dir, fallback_files[0])
+            else:
+                raise FileNotFoundError(f"Audio file missing before transcription!")
+            
+        file_size = os.path.getsize(audio_path)
+        print(f"🎙️ Transcribing {job_id}: {metadata['title']} (Size: {file_size / 1024 / 1024:.2f} MB)")
+        
+        if file_size < 100:
+            raise ValueError(f"Audio file is too small or empty ({file_size} bytes).")
+
+        # Synchronize access to whisper model
+        with whisper_lock:
+            result = whisper_model.transcribe(audio_path, fp16=False)
 
         return {
             "success": True,
@@ -132,7 +191,8 @@ def extract_youtube(video_url):
             "language": result.get("language", "en"),
             "summary": result["text"][:500] + "..." if len(result["text"]) > 500 else result["text"],
             "thumbnail_url": metadata.get("thumbnail"),
-            "thumbnail_public_id": "youtube"
+            "thumbnail_public_id": "youtube",
+            "extracted_from": "whisper_model"
         }
 
     except Exception as e:

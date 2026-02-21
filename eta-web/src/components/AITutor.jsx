@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Bot, User, Loader2, Volume2, Sparkles, AlertCircle, ArrowUpRight, CheckCircle2, Maximize2, Globe, Mic, MicOff, Youtube, Play, Square, Trash2 } from 'lucide-react';
+import { Send, Bot, User, Loader2, Volume2, Sparkles, AlertCircle, ArrowUpRight, CheckCircle2, Maximize2, Globe, Mic, MicOff, Youtube, Play, Square, Trash2, Clipboard, Clock } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import apiClient from '../api/axios.config';
 import toast from 'react-hot-toast';
@@ -73,9 +73,6 @@ const formatMessage = (content) => {
     const cleanContent = content
         .replace(/\[\[(INTRO|CONCEPT|CODE|SUMMARY)\]\]/g, '')
         .replace(/\[\[VIDEO:?\s*[^\]]*\]\]/g, '')
-        .replace(/(Video|Relevant video|Suggested video):\s*https?:\/\/[^\s]+/gi, '')
-        .replace(/https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/[^\s\[\]"'>]+/g, '')
-        .replace(/https?:\/\/[^\s\[\]"'>]+/g, '')
         .trim();
 
     if (!cleanContent) return null;
@@ -285,29 +282,48 @@ const parseInlineStyles = (text) => {
             );
         }
 
-        // Handle bold **text** and highlighted ==text==
-        const subParts = part.split(/(\*\*[^*]+\*\*|==[^=]+==)/g);
+        // Handle URLs next (make them purple and clickable)
+        const urlParts = part.split(/(https?:\/\/[^\s]+)/g);
 
-        return subParts.map((subPart, subIndex) => {
-            // Bold text
-            if (subPart.startsWith('**') && subPart.endsWith('**')) {
+        return urlParts.map((urlPart, urlIndex) => {
+            if (urlPart.match(/^https?:\/\/[^\s]+$/)) {
                 return (
-                    <strong key={`${partIndex}-${subIndex}`} className="font-bold text-blue-700 dark:text-blue-300">
-                        {subPart.slice(2, -2)}
-                    </strong>
+                    <a
+                        key={`${partIndex}-${urlIndex}`}
+                        href={urlPart}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#9333ea] hover:text-[#7e22ce] underline font-medium transition-colors break-all"
+                    >
+                        {urlPart}
+                    </a>
                 );
             }
 
-            // Highlighted text
-            if (subPart.startsWith('==') && subPart.endsWith('==')) {
-                return (
-                    <mark key={`${partIndex}-${subIndex}`} className="bg-yellow-200 dark:bg-yellow-600/30 text-gray-900 dark:text-gray-100 px-1 rounded">
-                        {subPart.slice(2, -2)}
-                    </mark>
-                );
-            }
+            // Handle bold **text** and highlighted ==text==
+            const subParts = urlPart.split(/(\*\*[^*]+\*\*|==[^=]+==)/g);
 
-            return subPart;
+            return subParts.map((subPart, subIndex) => {
+                // Bold text
+                if (subPart.startsWith('**') && subPart.endsWith('**')) {
+                    return (
+                        <strong key={`${partIndex}-${urlIndex}-${subIndex}`} className="font-bold text-blue-700 dark:text-blue-300">
+                            {subPart.slice(2, -2)}
+                        </strong>
+                    );
+                }
+
+                // Highlighted text
+                if (subPart.startsWith('==') && subPart.endsWith('==')) {
+                    return (
+                        <mark key={`${partIndex}-${urlIndex}-${subIndex}`} className="bg-yellow-200 dark:bg-yellow-600/30 text-gray-900 dark:text-gray-100 px-1 rounded">
+                            {subPart.slice(2, -2)}
+                        </mark>
+                    );
+                }
+
+                return subPart;
+            });
         });
     });
 };
@@ -633,6 +649,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                 role: 'assistant',
                 content: welcomeMessage,
                 id: welcomeId,
+                timestamp: new Date(),
                 isWelcome: true,
                 isTyping: true,
                 isConversational: true
@@ -773,7 +790,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
 
         const userMsgId = Date.now().toString();
 
-        setMessages(prev => [...prev, { role: 'user', content: userQuery, id: userMsgId }]);
+        setMessages(prev => [...prev, { role: 'user', content: userQuery, id: userMsgId, timestamp: new Date() }]);
         setInput('');
         setLoading(true);
 
@@ -794,6 +811,7 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                 role: 'assistant',
                 content: doubt.aiResponse,
                 id: aiMsgId,
+                timestamp: new Date(),
                 doubtId: doubt._id,
                 isTyping: true,
                 confidence: doubt.confidence || 95,
@@ -1087,17 +1105,37 @@ export default function AITutor({ courseId, contentId, contentTitle, selectedTex
                             </div>
 
                             <div className="flex-1 space-y-2 max-w-full overflow-hidden group/msg">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1">
-                                        {msg.role === 'user' ? 'Student' : 'AI Tutor'}
-                                    </span>
-                                    <button
-                                        onClick={() => handleDeletePair(msg.id)}
-                                        className="opacity-0 group-hover/msg:opacity-100 p-1.5 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 rounded-lg transition-all duration-200"
-                                        title="Delete Message Pair"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                <div className="flex items-center justify-between mb-1 gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1">
+                                            {msg.role === 'user' ? 'Student' : 'AI Tutor'}
+                                        </span>
+                                        {msg.timestamp && (
+                                            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/60 font-medium">
+                                                <Clock className="w-2.5 h-2.5" />
+                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover/msg:opacity-100 transition-all duration-200">
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(msg.content);
+                                                toast.success('Message copied!');
+                                            }}
+                                            className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded-lg"
+                                            title="Copy Message"
+                                        >
+                                            <Clipboard className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeletePair(msg.id)}
+                                            className="p-1.5 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 rounded-lg"
+                                            title="Delete Message Pair"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className={`py-1 text-sm leading-relaxed transition-all duration-300 w-full overflow-hidden`}>
 

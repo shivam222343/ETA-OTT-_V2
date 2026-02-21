@@ -408,7 +408,50 @@ export default function ContentViewer({ isOpen, onClose, content }) {
     };
 
     const renderViewer = () => {
-        switch (content.type) {
+        const type = (localContent?.type || content?.type || '').toLowerCase();
+        const format = (localContent?.file?.format || content?.file?.format || '').toLowerCase();
+        const url = localContent?.file?.url || content?.file?.url || '';
+
+        // Prioritize video player if it's a known video format or explicitly typed
+        if (type === 'video' || format === 'youtube' || url.includes('youtube.com') || url.includes('youtu.be')) {
+            return (
+                <div className="relative aspect-video w-full bg-black flex items-center justify-center group h-full">
+                    <ReactPlayer
+                        ref={playerRef}
+                        url={url}
+                        controls={!isSelectionMode}
+                        width="100%"
+                        height="100%"
+                        style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%' }}
+                        playing={!isSelectionMode}
+                        light={(localContent?.file?.thumbnail?.url || content?.file?.thumbnail?.url) || false}
+                        playIcon={
+                            <div className="w-20 h-20 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-2xl scale-125 hover:scale-150 transition-transform">
+                                <Play className="w-8 h-8 fill-current ml-1" />
+                            </div>
+                        }
+                        config={{
+                            file: {
+                                attributes: {
+                                    controlsList: 'nodownload'
+                                }
+                            }
+                        }}
+                    />
+                    {isSelectionMode && (
+                        <div
+                            className="absolute inset-0 z-20 bg-transparent cursor-crosshair"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    )}
+                    {isSelectionMode && !selectionBox && (
+                        <div className="absolute inset-0 bg-black/20 pointer-events-none transition-opacity" />
+                    )}
+                </div>
+            );
+        }
+
+        switch (type) {
             case 'pdf':
                 return (
                     <div className="flex flex-col items-center bg-gray-100 dark:bg-gray-900 overflow-auto p-4 min-h-[500px] w-full custom-scrollbar">
@@ -502,43 +545,6 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                             </Document>
                         </div>
                     </div >
-                );
-            case 'video':
-                return (
-                    <div className="relative aspect-video w-full bg-black flex items-center justify-center group">
-                        <ReactPlayer
-                            ref={playerRef}
-                            url={content.file.url}
-                            controls={!isSelectionMode}
-                            width="100%"
-                            height="100%"
-                            style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%' }}
-                            playing={!isSelectionMode}
-                            light={content.type === 'video' && content.file?.thumbnail?.url ? content.file.thumbnail.url : false}
-                            playIcon={
-                                <div className="w-20 h-20 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-2xl scale-125 hover:scale-150 transition-transform">
-                                    <Play className="w-8 h-8 fill-current ml-1" />
-                                </div>
-                            }
-                            config={{
-                                file: {
-                                    attributes: {
-                                        controlsList: 'nodownload'
-                                    }
-                                }
-                            }}
-                        />
-                        {isSelectionMode && (
-                            <div
-                                className="absolute inset-0 z-20 bg-transparent cursor-crosshair"
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        )}
-                        {/* Dim overlay when selection mode is active to emphasize interaction */}
-                        {isSelectionMode && !selectionBox && (
-                            <div className="absolute inset-0 bg-black/20 pointer-events-none transition-opacity" />
-                        )}
-                    </div>
                 );
             case 'image':
                 return (
@@ -833,16 +839,16 @@ export default function ContentViewer({ isOpen, onClose, content }) {
     };
 
     return (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center ${isFullScreen ? 'p-0' : 'p-4 md:p-8'} bg-black/80 backdrop-blur-sm`}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-0">
             <motion.div
-                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                className={`bg-card w-full h-full max-w-7xl overflow-hidden flex flex-col ${isFullScreen ? '' : 'rounded-2xl shadow-2xl border border-border/50'} ${isSelectionMode ? 'cursor-crosshair' : ''}`}
+                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                className={`bg-card w-screen h-screen overflow-hidden flex flex-col ${isSelectionMode ? 'cursor-crosshair' : ''}`}
             >
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 gap-4 border-b bg-card">
                     <div className="flex items-center gap-4 min-w-0 flex-1">
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            {content.type === 'video' ? <Video className="w-5 h-5 text-primary" /> : <FileText className="w-5 h-5 text-primary" />}
+                            {(localContent?.type === 'video' || localContent?.file?.format === 'youtube') ? <Video className="w-5 h-5 text-primary" /> : <FileText className="w-5 h-5 text-primary" />}
                         </div>
                         <div className="min-w-0 flex-1">
                             <h2 className="text-lg font-bold truncate pr-4">{localContent?.title || 'Loading Content...'}</h2>

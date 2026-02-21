@@ -24,6 +24,15 @@ export default function LoginPage() {
         setLoading(true);
         try {
             const user = await login(email, password);
+
+            // Role verification
+            if (user?.role !== role) {
+                toast.error(`Role Mismatch: This is a ${user.role} account. Please select the "${user.role.charAt(0).toUpperCase() + user.role.slice(1)}" option above to login.`);
+                // Clean up any partial state
+                localStorage.removeItem('token');
+                return;
+            }
+
             if (user?.role === 'faculty') navigate('/faculty/dashboard');
             else if (user?.role === 'student') navigate('/student/dashboard');
             else navigate('/dashboard');
@@ -38,6 +47,11 @@ export default function LoginPage() {
         setLoading(true);
         try {
             const user = await loginWithGoogle(role);
+            if (user?.role !== role) {
+                toast.error(`Role Mismatch: This account is already registered as a ${user.role}. Please switch to the ${user.role} role to continue.`);
+                localStorage.removeItem('token');
+                return;
+            }
             if (user?.role === 'faculty') navigate('/faculty/dashboard');
             else if (user?.role === 'student') navigate('/student/dashboard');
             else navigate('/dashboard');

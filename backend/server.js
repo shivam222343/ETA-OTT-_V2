@@ -33,6 +33,11 @@ import { initializeWebSocket } from './services/websocket.service.js';
 const app = express();
 const httpServer = createServer(app);
 
+// Increase server timeout to 20 minutes for long-running AI/ML tasks
+httpServer.timeout = 1200000;
+httpServer.keepAliveTimeout = 610000; // Slightly more than Axios timeout
+httpServer.headersTimeout = 620000;
+
 // Get allowed origins
 const defaultOrigins = [
     'http://localhost:5173',

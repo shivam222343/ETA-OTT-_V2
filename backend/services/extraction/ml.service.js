@@ -26,7 +26,7 @@ export const extractWithML = async (fileUrl, contentId, contentType) => {
             content_id: contentId,
             content_type: contentType
         }, {
-            timeout: 600000, // 10 minutes
+            timeout: 1200000, // 20 minutes
             signal: controller.signal
         });
 

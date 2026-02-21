@@ -59,6 +59,11 @@ export default function SignupPage() {
         setLoading(true);
         try {
             const user = await loginWithGoogle(formData.role);
+            if (user?.role !== formData.role) {
+                toast.error(`Account Conflict: You already have an account as a ${user.role}. Please switch to the ${user.role} role on the Login page.`);
+                localStorage.removeItem('token');
+                return;
+            }
             if (user?.role === 'faculty') navigate('/faculty/dashboard');
             else if (user?.role === 'student') navigate('/student/dashboard');
             else navigate('/dashboard');
