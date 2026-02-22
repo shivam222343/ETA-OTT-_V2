@@ -1,0 +1,29 @@
+# ============================================
+# Docker Compose — Instance 2 (ML Server)
+# FastAPI + PyTorch (CPU-only)
+# ============================================
+
+services:
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: eta-ml-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Memory management for t2.micro (1GB RAM)
+    deploy:
+      resources:
+        limits:
+          memory: 900M
+        reservations:
+          memory: 512M

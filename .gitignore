@@ -40,3 +40,7 @@ logs/
 .idea/
 *.swp
 *.swo
+
+eta-web/node_modules
+backend/node_modules
+

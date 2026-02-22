@@ -1,0 +1,25 @@
+# Dependencies (rebuilt in container)
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+install.log
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+
+# Git
+.git
+.gitignore
