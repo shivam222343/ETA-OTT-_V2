@@ -4,6 +4,8 @@ import { runNeo4jQuery } from '../config/neo4j.config.js';
 
 dotenv.config();
 
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -130,7 +132,7 @@ const calculateConfidence = (params) => {
 // Helper to get embeddings from ML service (Rule 1)
 const getEmbedding = async (text) => {
     try {
-        const response = await axios.post('http://localhost:8000/embeddings', { text });
+        const response = await axios.post(`${ML_SERVICE_URL}/embeddings`, { text });
         return response.data.success ? response.data.embedding : null;
     } catch (error) {
         console.warn('Embedding service unavailable:', error.message);
@@ -527,10 +529,231 @@ export const saveDoubtToGraph = async (query, answer, confidence, context = '', 
     }
 };
 
+export const resolveGuestDoubt = async (query, institutionCode = null, guestContext = {}) => {
+    try {
+        let kgContext = '';
+        let relatedNodes = [];
+
+        // 1. Fetch context from KG if institution is known
+        if (institutionCode) {
+            const graphData = await runNeo4jQuery(
+                `MATCH (i:Institution)-[:CONTAINS]->(b:Branch)-[:OFFERS]->(c:Course)-[:HAS_CONTENT]->(content:Content)
+                 WHERE i.name CONTAINS $code OR i.id = $code
+                 MATCH (content)-[:COVERS|TEACHES]->(node)
+                 WHERE node.name =~ $queryRegex OR $query CONTAINS node.name
+                 RETURN DISTINCT node.name as name, labels(node)[0] as type
+                 LIMIT 5`,
+                {
+                    code: institutionCode,
+                    query: query,
+                    queryRegex: `(?i).*${query.split(' ')[0]}.*`
+                }
+            );
+
+            if (graphData.records.length > 0) {
+                relatedNodes = graphData.records.map(r => r.get('name'));
+                kgContext = `Institutional Knowledge Context: This query relates to the following concepts in your curriculum: ${relatedNodes.join(', ')}.`;
+            }
+        }
+
+        // 2. Multimodal context extraction (if provided)
+        let mediaContext = guestContext.extractedText ? `\nContent extracted from your upload: ${guestContext.extractedText}` : '';
+
+        // 3. Call Groq
+        const messages = [
+            {
+                role: 'system',
+                content: `You are the Eta Academic Concierge. 
+                You are helping a guest student who is interacting via WhatsApp/Messaging.
+                
+                IDENTITY:
+                - You represent Eta, an AI-powered OTT Platform for Education.
+                - You are smart, professional, yet encouraging.
+                
+                RULES:
+                - Use the provided context to give a high-quality answer.
+                - Keep the answer concise (max 200 words).
+                - Use Markdown for bolding and bullet points.
+                - ALWAYS mention if the data was found in their specific institution's knowledge graph.
+                - AT THE END: Always include a call-to-action to login to the full platform.
+                
+                CONTEXT:
+                ${kgContext}
+                ${mediaContext}`
+            },
+            {
+                role: 'user',
+                content: query
+            }
+        ];
+
+        const response = await axios.post(GROQ_API_URL, {
+            model: GROQ_MODEL,
+            messages,
+            temperature: 0.5,
+            max_tokens: 800
+        }, {
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const answer = response.data.choices[0].message.content;
+
+        // 5. Append Growth Metadata
+        let finalResponse = answer;
+        if (relatedNodes.length > 0) {
+            finalResponse += `\n\n🔍 **Found in your Curriculum:**\nThis topic is linked to: *${relatedNodes.join(', ')}* in your portal.`;
+        }
+        finalResponse += `\n\n🚀 **Unlock Full Potential:**\nTo see interactive 3D graphs, teacher videos, and get unlimited AI support, visit: https://eta-ott.netlify.app/login`;
+
+        return {
+            success: true,
+            answer: finalResponse,
+            source: relatedNodes.length > 0 ? 'institutional_kg' : 'general_ai'
+        };
+
+    } catch (error) {
+        console.error('Guest resolve error:', error.message);
+        return {
+            success: false,
+            answer: "The Eta system is currently processing high traffic. Please try again or log in to your portal for priority access."
+        };
+    }
+};
+
+export const analyzeDifficultMaterial = async (queries, materialTitle, subjectName) => {
+    try {
+        if (!queries || queries.length === 0) {
+            return {
+                summary: "Insufficient data to analyze difficulty.",
+                painPoints: [],
+                recommendation: "Collect more student feedback."
+            };
+        }
+
+        const systemPrompt = `You are an educational consultant. Students are struggling with a specific learning material.
+        Analyze the provided student queries and identify the core reasons for their difficulty.
+        
+        Material: ${materialTitle}
+        Subject: ${subjectName}
+        
+        Provide your analysis in the following JSON format:
+        {
+          "summary": "A concise overview of the main struggle students are facing (max 50 words)",
+          "painPoints": ["Point 1", "Point 2", "Point 3"],
+          "recommendation": "Concrete advice for faculty to improve this material or replace it with something easier."
+        }
+        
+        Return ONLY the JSON.`;
+
+        const response = await axios.post(
+            GROQ_API_URL,
+            {
+                model: GROQ_MODEL,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `Student Queries:\n${queries.join('\n')}` }
+                ],
+                temperature: 0.3,
+                response_format: { type: "json_object" }
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            }
+        );
+
+        return JSON.parse(response.data.choices[0].message.content);
+    } catch (error) {
+        console.error('AI Material Analysis failed:', error.message);
+        return {
+            summary: "Error during AI analysis.",
+            painPoints: [],
+            recommendation: "Check system logs."
+        };
+    }
+};
+
+export const resolvePlatformQuery = async (query, history = [], userName = 'User', language = 'english') => {
+    try {
+        const hindiKeywords = /hindi|batao|kaise|kya|kyun|samajh|hai|hoon|tha|the|thi/i;
+        const isHindiDetected = hindiKeywords.test(query) || language.toLowerCase() === 'hindi';
+        const detectedLanguage = isHindiDetected ? 'hindi' : 'english';
+
+        let languageInstruction = "";
+        if (detectedLanguage === 'hindi') {
+            languageInstruction = `
+- **LANGUAGE**: STRICT HINGLISH ONLY (Hindi words written in English script).
+- **CRITICAL**: Use Hindi vocabulary but ONLY Latin letters. Absolutely NO Devanagari (हिंदी नहीं).
+- **TONE**: Natural, helpful, and direct "Aap" style.
+- **STYLE**: Natural Hinglish like how students chat.`;
+        } else {
+            languageInstruction = `
+- **LANGUAGE**: PROFESSIONAL ENGLISH ONLY.
+- **TONE**: Helpful Platform Assistant. Precise and clear.`;
+        }
+
+        const systemPrompt = `You are the "Eta Platform Guide", an AI assistant built to help users navigate and understand the Eta OTT Education platform.
+
+IDENTITY & KNOWLEDGE:
+- Platform Name: Eta (OTT for Education)
+- Key Features: 3D Knowledge Graphs, AI Tutors, OTT-style content delivery, Faculty Dashboards, Student Learning Analytics, Real-time Doubt Resolution.
+- Your Goal: Help users understand how to use the platform, find their courses, use the AI Tutor (pencil icon), upload content (if faculty), etc.
+
+RULES:
+${languageInstruction}
+- Be concise.
+- Use Markdown for bolding and structure.
+- If the user asks general technical/academic questions outside platform scope, still help them but remind them they can use the course-specific AI Tutor for deeper study.
+- Use ${userName}'s name naturally.
+
+CONVERSATION HISTORY:
+${history.map(h => `${h.role}: ${h.content}`).join('\n')}
+`;
+
+        const response = await axios.post(
+            GROQ_API_URL,
+            {
+                model: GROQ_MODEL,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: query }
+                ],
+                temperature: 0.6,
+                max_tokens: 1024
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            }
+        );
+
+        return {
+            success: true,
+            answer: response.data.choices[0].message.content,
+            detectedLanguage
+        };
+    } catch (error) {
+        console.error('Platform Query AI failed:', error.message);
+        throw new Error('Platform Assistant is currently unavailable.');
+    }
+};
+
 export default {
     searchExistingDoubts,
     askGroq,
     saveDoubtToGraph,
     searchKnowledgeGraph,
-    saveToKnowledgeGraph
+    saveToKnowledgeGraph,
+    resolveGuestDoubt,
+    analyzeDifficultMaterial,
+    resolvePlatformQuery
 };

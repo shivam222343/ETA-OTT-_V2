@@ -11,8 +11,53 @@ import { emitToCourse, emitToUser } from '../services/websocket.service.js';
 import { runNeo4jQuery } from '../config/neo4j.config.js';
 import Notification from '../models/Notification.model.js';
 import { sendNotification } from '../services/websocket.service.js';
+import { guestRateLimit } from '../middleware/guestRateLimit.middleware.js';
+import { extractWithML } from '../services/extraction/ml.service.js';
 
 const router = express.Router();
+
+/**
+ * WhatsApp/Guest Layer - Primary Entry point
+ * Non-persistent, Rate-limited, KG-aware, and supports Multimodal Media
+ */
+router.post('/whatsapp-guest', guestRateLimit, async (req, res) => {
+    try {
+        const { query, institutionCode, mediaUrl, mediaType, guestId } = req.body;
+
+        if (!query && !mediaUrl) {
+            return res.status(400).json({ success: false, message: 'Query or media is required' });
+        }
+
+        let guestContext = {};
+
+        // 1. Multimodal Handling (PDF/Image Context Extraction)
+        if (mediaUrl) {
+            try {
+                const tempId = guestId || 'guest_temp';
+                console.log(`📸 WhatsApp Guest: Extracting context from ${mediaType || 'media'}...`);
+                // Use a standard type if none provided
+                const type = mediaType || (mediaUrl.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image');
+                const extraction = await extractWithML(mediaUrl, tempId, type);
+                guestContext.extractedText = extraction?.text || extraction?.content || '';
+                console.log(`✅ Extracted ${guestContext.extractedText.length} chars for guest context`);
+            } catch (err) {
+                console.warn('⚠️ Guest media extraction failed:', err.message);
+                // Continue with query if extraction fails
+            }
+        }
+
+        // 2. Resolve via specialized Guest Service (Neo4j KG + Groq)
+        const result = await aiService.resolveGuestDoubt(query || 'Explain what is in this image/document', institutionCode, guestContext);
+
+        res.json(result);
+    } catch (error) {
+        console.error('❌ WhatsApp Guest Error:', error);
+        res.status(500).json({
+            success: false,
+            answer: "Eta is experiencing high traffic in this guest layer. Please try again or log in to your portal for faster resolution!"
+        });
+    }
+});
 
 /**
  * Ask a doubt - Main resolution workflow

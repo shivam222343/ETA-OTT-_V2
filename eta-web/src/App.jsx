@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { SocketProvider } from './contexts/SocketContext';
 import Loader from './components/Loader';
+import GlobalAITutor from './components/GlobalAITutor';
 
 // Lazy Loaded Pages
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -167,6 +168,7 @@ function App() {
               <Suspense fallback={<Loader />}>
                 <AppRoutes />
               </Suspense>
+              <GlobalAITutor />
               <Toaster
                 position="top-right"
                 toastOptions={{

@@ -8,10 +8,12 @@ import {
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
 import UploadContentModal from '../../components/faculty/UploadContentModal';
+import BulkUploadModal from '../../components/faculty/BulkUploadModal';
 import ContentCard from '../../components/faculty/ContentCard';
 import ContentViewer from '../../components/faculty/ContentViewer';
 import CourseKnowledgeGraph from '../../components/faculty/CourseKnowledgeGraph';
-import { Network } from 'lucide-react';
+import StudentProfileSlideover from '../../components/faculty/StudentProfileSlideover';
+import { Network, Layers, Users as UsersIcon, Mail, Trophy as TrophyIcon } from 'lucide-react';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
 
@@ -26,6 +28,9 @@ export default function ManageCourseContent() {
 
     // Modal states
     const [showUploadModal, setShowUploadModal] = useState(false);
+    const [showBulkModal, setShowBulkModal] = useState(false);
+    const [showStudentSlideover, setShowStudentSlideover] = useState(false);
+    const [selectedStudentId, setSelectedStudentId] = useState(null);
     const [selectedContent, setSelectedContent] = useState(null);
     const [showViewer, setShowViewer] = useState(false);
     const [showGraph, setShowGraph] = useState(false);
@@ -34,6 +39,9 @@ export default function ManageCourseContent() {
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
     const [difficultyFilter, setDifficultyFilter] = useState('all');
+    const [activeTab, setActiveTab] = useState('content'); // 'content' or 'students'
+    const [enrolledStudents, setEnrolledStudents] = useState([]);
+    const [fetchingStudents, setFetchingStudents] = useState(false);
 
     useEffect(() => {
         const handleOpenGraph = (e) => {
@@ -94,6 +102,11 @@ export default function ManageCourseContent() {
             // Fetch content for this course
             const contentResponse = await apiClient.get(`/content/course/${courseId}`);
             setContent(contentResponse.data.data.content || []);
+
+            // If we are on students tab, fetch them too
+            if (activeTab === 'students') {
+                fetchEnrolledStudents();
+            }
         } catch (error) {
             console.error('Fetch course data error:', error);
             toast.error('Failed to load course data');
@@ -130,6 +143,25 @@ export default function ManageCourseContent() {
         setContent([newContent, ...content]);
         toast.success('Content uploaded successfully!');
     };
+
+    const fetchEnrolledStudents = async () => {
+        setFetchingStudents(true);
+        try {
+            const response = await apiClient.get(`/courses/${courseId}/students`);
+            setEnrolledStudents(response.data.data.students || []);
+        } catch (error) {
+            console.error('Fetch students error:', error);
+            toast.error('Failed to load enrolled students');
+        } finally {
+            setFetchingStudents(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'students' && enrolledStudents.length === 0) {
+            fetchEnrolledStudents();
+        }
+    }, [activeTab]);
 
     const handleViewContent = (item) => {
         setSelectedContent(item);
@@ -247,9 +279,13 @@ export default function ManageCourseContent() {
                                 <Network className="w-4 h-4 text-primary" />
                                 <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Knowledge Graph</span>
                             </button>
-                            <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl transition-all shadow-lg shadow-primary/20">
-                                <Plus className="w-4 h-4" />
+                            <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-secondary/30 hover:bg-secondary/50 rounded-xl transition-all shadow-sm">
+                                <Plus className="w-4 h-4 text-primary" />
                                 <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Upload Resource</span>
+                            </button>
+                            <button onClick={() => setShowBulkModal(true)} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl transition-all shadow-lg shadow-primary/20">
+                                <Layers className="w-4 h-4" />
+                                <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Bulk Upload</span>
                             </button>
                         </div>
                     </div>
@@ -343,84 +379,179 @@ export default function ManageCourseContent() {
                         </div>
                     </motion.div>
                 </div>
+            </div>
 
-                {/* Filters */}
-                <div className="card p-4 mb-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="md:col-span-2">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search content..."
-                                    className="input w-full pl-10"
-                                />
+            {/* Tabs */}
+            <div className="container mx-auto px-4 mt-8 border-b border-border/50">
+                <div className="flex gap-8">
+                    <button
+                        onClick={() => setActiveTab('content')}
+                        className={`py-4 text-xs font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'content' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        Course Resources
+                        {activeTab === 'content' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('students')}
+                        className={`py-4 text-xs font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'students' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        Enrolled Students
+                        {activeTab === 'students' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />}
+                    </button>
+                </div>
+            </div>
+
+            <div className="container mx-auto px-4 py-8 space-y-8">
+                {activeTab === 'content' ? (
+                    <>
+                        {/* Filters */}
+                        <div className="card p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-2">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder="Search content..."
+                                            className="input w-full pl-10"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <select
+                                        value={typeFilter}
+                                        onChange={(e) => setTypeFilter(e.target.value)}
+                                        className="input w-full"
+                                    >
+                                        <option value="all">All Types</option>
+                                        <option value="pdf">PDF</option>
+                                        <option value="video">Video</option>
+                                        <option value="presentation">Presentation</option>
+                                        <option value="document">Document</option>
+                                        <option value="image">Image</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <select
+                                        value={difficultyFilter}
+                                        onChange={(e) => setDifficultyFilter(e.target.value)}
+                                        className="input w-full"
+                                    >
+                                        <option value="all">All Levels</option>
+                                        <option value="beginner">Beginner</option>
+                                        <option value="intermediate">Intermediate</option>
+                                        <option value="advanced">Advanced</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <select
-                                value={typeFilter}
-                                onChange={(e) => setTypeFilter(e.target.value)}
-                                className="input w-full"
-                            >
-                                <option value="all">All Types</option>
-                                <option value="pdf">PDF</option>
-                                <option value="video">Video</option>
-                                <option value="presentation">Presentation</option>
-                                <option value="document">Document</option>
-                                <option value="image">Image</option>
-                            </select>
-                        </div>
-                        <div>
-                            <select
-                                value={difficultyFilter}
-                                onChange={(e) => setDifficultyFilter(e.target.value)}
-                                className="input w-full"
-                            >
-                                <option value="all">All Levels</option>
-                                <option value="beginner">Beginner</option>
-                                <option value="intermediate">Intermediate</option>
-                                <option value="advanced">Advanced</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
 
-                {/* Content Grid */}
-                {filteredContent.length === 0 ? (
-                    <div className="card p-12 text-center">
-                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">
-                            {content.length === 0 ? 'No content yet' : 'No matching content'}
-                        </h3>
-                        <p className="text-muted-foreground mb-4">
-                            {content.length === 0
-                                ? 'Upload your first learning material to get started'
-                                : 'Try adjusting your filters'}
-                        </p>
-                        {content.length === 0 && (
-                            <button
-                                onClick={() => setShowUploadModal(true)}
-                                className="btn-primary"
-                            >
-                                Upload Content
-                            </button>
+                        {/* Content Grid */}
+                        {filteredContent.length === 0 ? (
+                            <div className="card p-12 text-center">
+                                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                                <h3 className="text-lg font-semibold mb-2">
+                                    {content.length === 0 ? 'No content yet' : 'No matching content'}
+                                </h3>
+                                <p className="text-muted-foreground mb-4">
+                                    {content.length === 0
+                                        ? 'Upload your first learning material to get started'
+                                        : 'Try adjusting your filters'}
+                                </p>
+                                {content.length === 0 && (
+                                    <button
+                                        onClick={() => setShowUploadModal(true)}
+                                        className="btn-primary"
+                                    >
+                                        Upload Content
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {filteredContent.map((item) => (
+                                    <ContentCard
+                                        key={item._id}
+                                        content={item}
+                                        onView={handleViewContent}
+                                        onDownload={handleDownloadContent}
+                                        onDelete={handleDeleteContent}
+                                        onReprocess={handleReprocessContent}
+                                    />
+                                ))}
+                            </div>
                         )}
-                    </div>
+                    </>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredContent.map((item) => (
-                            <ContentCard
-                                key={item._id}
-                                content={item}
-                                onView={handleViewContent}
-                                onDownload={handleDownloadContent}
-                                onDelete={handleDeleteContent}
-                                onReprocess={handleReprocessContent}
-                            />
-                        ))}
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {fetchingStudents ? (
+                                [1, 2, 3].map(i => (
+                                    <div key={i} className="h-48 bg-card animate-pulse rounded-3xl border border-border/50" />
+                                ))
+                            ) : enrolledStudents.length > 0 ? (
+                                enrolledStudents.map((student) => (
+                                    <motion.div
+                                        key={student._id}
+                                        whileHover={{ y: -5 }}
+                                        onClick={() => {
+                                            setSelectedStudentId(student._id);
+                                            setShowStudentSlideover(true);
+                                        }}
+                                        className="bg-card p-6 rounded-3xl border border-border/50 hover:shadow-xl hover:border-primary/30 transition-all group cursor-pointer overflow-hidden relative"
+                                    >
+                                        <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-5 transition-opacity">
+                                            <UsersIcon className="w-24 h-24" />
+                                        </div>
+                                        <div className="flex items-center gap-4 relative">
+                                            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xl border border-primary/20 overflow-hidden">
+                                                {student.profile?.avatar ? (
+                                                    <img src={student.profile.avatar} alt={student.profile.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    student.profile?.name?.[0]
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-black text-lg truncate group-hover:text-primary transition-colors">{student.profile.name}</h4>
+                                                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                    <Mail className="w-3 h-3" />
+                                                    <span className="truncate">{student.email}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-6 grid grid-cols-2 gap-3 pt-6 border-t border-border/50">
+                                            <div className="p-3 bg-secondary/30 rounded-2xl">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <TrophyIcon className="w-3 h-3 text-orange-500" />
+                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Confidence</span>
+                                                </div>
+                                                <p className="font-black text-primary">{student.confidenceScore || 0}%</p>
+                                            </div>
+                                            <div className="p-3 bg-secondary/30 rounded-2xl">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <BookOpen className="w-3 h-3 text-emerald-500" />
+                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Enrolled</span>
+                                                </div>
+                                                <p className="font-black text-primary">{student.progressStats?.coursesEnrolled || 0}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 flex items-center justify-end gap-2 text-[10px] font-black uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-all">
+                                            View Performance Analysis
+                                        </div>
+                                    </motion.div>
+                                ))
+                            ) : (
+                                <div className="col-span-full py-20 text-center bg-card/30 rounded-3xl border border-dashed border-border/50">
+                                    <UsersIcon className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                                    <h3 className="text-lg font-bold">No students enrolled yet</h3>
+                                    <p className="text-sm text-muted-foreground">Students from selected branches will appear here.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
@@ -433,6 +564,15 @@ export default function ManageCourseContent() {
                 courseId={courseId}
                 courseName={course.name}
             />
+
+            {/* Bulk Upload Modal */}
+            <BulkUploadModal
+                isOpen={showBulkModal}
+                onClose={() => setShowBulkModal(false)}
+                onSuccess={handleUploadSuccess}
+                courseId={courseId}
+                courseName={course.name}
+            />
             {/* Content Viewer Modal */}
             <ContentViewer
                 isOpen={showViewer}
@@ -441,6 +581,14 @@ export default function ManageCourseContent() {
                     setSelectedContent(null);
                 }}
                 content={selectedContent}
+            />
+
+            {/* Student Profile Slideover */}
+            <StudentProfileSlideover
+                isOpen={showStudentSlideover}
+                onClose={() => setShowStudentSlideover(false)}
+                studentId={selectedStudentId}
+                courseName={course?.name}
             />
 
             {/* Knowledge Graph Modal */}

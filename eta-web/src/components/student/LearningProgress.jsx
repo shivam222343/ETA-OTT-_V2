@@ -43,14 +43,14 @@ const ChartCard = ({ title, children, icon: Icon, description }) => (
     </motion.div>
 );
 
-export default function LearningProgress() {
+export default function LearningProgress({ overrideUserId, isCompact = false }) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [analytics, setAnalytics] = useState(null);
 
     useEffect(() => {
         const fetchAnalytics = async () => {
-            const userId = user?._id || user?.id;
+            const userId = overrideUserId || user?._id || user?.id;
             if (!userId) {
                 setLoading(false);
                 return;
@@ -66,7 +66,7 @@ export default function LearningProgress() {
         };
 
         fetchAnalytics();
-    }, [user?._id, user?.id]);
+    }, [user?._id, user?.id, overrideUserId]);
 
     if (loading) {
         return (
@@ -125,55 +125,57 @@ export default function LearningProgress() {
     return (
         <div className="space-y-8 pb-12">
             {/* Summary Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="card p-6 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border-blue-500/20">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-500 rounded-2xl text-white block shadow-lg shadow-blue-500/20">
-                            <MessageSquare className="w-6 h-6" />
+            {!isCompact && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="card p-6 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border-blue-500/20">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-blue-500 rounded-2xl text-white block shadow-lg shadow-blue-500/20">
+                                <MessageSquare className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-black">{stats.totalDoubts}</p>
+                                <p className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400">Total Doubts Asked</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-2xl font-black">{stats.totalDoubts}</p>
-                            <p className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400">Total Doubts Asked</p>
-                        </div>
-                    </div>
-                </motion.div>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="card p-6 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border-emerald-500/20">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-emerald-500 rounded-2xl text-white shadow-lg shadow-emerald-500/20">
-                            <Target className="w-6 h-6" />
+                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="card p-6 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border-emerald-500/20">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-emerald-500 rounded-2xl text-white shadow-lg shadow-emerald-500/20">
+                                <Target className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-black">{Math.round(stats.completionRate)}%</p>
+                                <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400">Course Completion</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-2xl font-black">{Math.round(stats.completionRate)}%</p>
-                            <p className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400">Course Completion</p>
-                        </div>
-                    </div>
-                </motion.div>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="card p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-purple-500 rounded-2xl text-white shadow-lg shadow-purple-500/20">
-                            <BookOpen className="w-6 h-6" />
+                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="card p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-purple-500 rounded-2xl text-white shadow-lg shadow-purple-500/20">
+                                <BookOpen className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-black">{stats.coursesEnrolled}</p>
+                                <p className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400">Courses Enrolled</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-2xl font-black">{stats.coursesEnrolled}</p>
-                            <p className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400">Courses Enrolled</p>
-                        </div>
-                    </div>
-                </motion.div>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="card p-6 bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/20">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-orange-500 rounded-2xl text-white shadow-lg shadow-orange-500/20">
-                            <Trophy className="w-6 h-6" />
+                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="card p-6 bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/20">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-orange-500 rounded-2xl text-white shadow-lg shadow-orange-500/20">
+                                <Trophy className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-black">{stats.resolvedDoubts}</p>
+                                <p className="text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400">Doubt Resolved</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-2xl font-black">{stats.resolvedDoubts}</p>
-                            <p className="text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400">Doubt Resolved</p>
-                        </div>
-                    </div>
-                </motion.div>
-            </div>
+                    </motion.div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* 1. Weekly Activity */}

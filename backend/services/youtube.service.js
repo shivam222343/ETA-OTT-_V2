@@ -3,6 +3,12 @@ import User from '../models/User.model.js';
 import Course from '../models/Course.model.js';
 import Content from '../models/Content.model.js';
 import { getCache, setCache } from '../config/redis.config.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+
 
 /**
  * Advanced YouTube search using Python ML service with semantic embeddings
@@ -38,7 +44,7 @@ export const searchVideos = async (query, options = {}) => {
         }
 
         // Call Python ML service for advanced semantic search
-        const response = await axios.post('http://localhost:8000/search-videos', {
+        const response = await axios.post(`${ML_SERVICE_URL}/search-videos`, {
             query: query.substring(0, 200),
             selected_text: selectedText.substring(0, 500),
             transcript_segment: transcriptSegment.substring(0, 500),

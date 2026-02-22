@@ -35,6 +35,7 @@ export default function StudentDashboard() {
     const [branches, setBranches] = useState([]);
     const [courses, setCourses] = useState([]);
     const [recentContent, setRecentContent] = useState([]);
+    const [totalContentCount, setTotalContentCount] = useState(0);
     const [selectedContent, setSelectedContent] = useState(null);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [infoContent, setInfoContent] = useState(null);
@@ -78,6 +79,7 @@ export default function StudentDashboard() {
             setCourses(allCourses.filter(c => c.code !== 'YT_DISCOVERY'));
 
             setRecentContent(contentRes.data.data.recentContent || []);
+            setTotalContentCount(contentRes.data.data.totalContent || 0);
 
             // Fetch YouTube recommendations in background
             fetchYouTubeRecommendations();
@@ -186,7 +188,7 @@ export default function StudentDashboard() {
     const stats = [
         { label: 'Enrolled Branches', value: branches.length.toString(), icon: GraduationCap, color: 'text-blue-500', bg: 'bg-blue-500/10' },
         { label: 'Active Courses', value: courses.length.toString(), icon: BookOpen, color: 'text-green-500', bg: 'bg-green-500/10' },
-        { label: 'Total Content', value: recentContent.length.toString(), icon: Clock, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+        { label: 'Total Content', value: totalContentCount.toString(), icon: Clock, color: 'text-purple-500', bg: 'bg-purple-500/10' },
         { label: 'Certificates', value: '0', icon: Trophy, color: 'text-orange-500', bg: 'bg-orange-500/10' },
     ];
 

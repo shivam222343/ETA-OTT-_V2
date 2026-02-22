@@ -46,7 +46,9 @@ const ChartCard = ({ title, children, icon: Icon, description }) => (
 export default function FacultyAnalytics() {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [fetchingReports, setFetchingReports] = useState(true);
     const [data, setData] = useState(null);
+    const [difficultyReports, setDifficultyReports] = useState([]);
 
     useEffect(() => {
         const fetchFacultyAnalytics = async () => {
@@ -56,12 +58,17 @@ export default function FacultyAnalytics() {
                 return;
             }
             try {
-                const response = await apiClient.get(`/analytics/faculty/${userId}`);
-                setData(response.data.data);
+                const [analyticsRes, reportsRes] = await Promise.all([
+                    apiClient.get(`/analytics/faculty/${userId}`),
+                    apiClient.get(`/analytics/faculty/${userId}/difficulty-reports`)
+                ]);
+                setData(analyticsRes.data.data);
+                setDifficultyReports(reportsRes.data.data || []);
             } catch (error) {
                 console.error('Faculty Analytics fetch error:', error);
             } finally {
                 setLoading(false);
+                setFetchingReports(false);
             }
         };
 
@@ -119,9 +126,12 @@ export default function FacultyAnalytics() {
         );
     }
 
+    const [showAllReports, setShowAllReports] = useState(false);
+    const visibleReports = showAllReports ? difficultyReports : difficultyReports.slice(0, 10);
+
     return (
         <div className="space-y-8 pb-12">
-            {/* Faculty Top Stats */}
+            {/* ... stats sections ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card p-6 border-l-4 border-blue-500 shadow-sm">
                     <div className="flex justify-between items-start">
@@ -236,7 +246,109 @@ export default function FacultyAnalytics() {
                     </PieChart>
                 </ChartCard>
             </div>
+
+            {/* AI Material Difficulty Analysis Section */}
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-red-500/10 rounded-xl text-red-500">
+                            <Brain className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-black tracking-tight">AI MATERIAL DIFFICULTY ANALYSIS</h2>
+                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Identifying problematic learning resources</p>
+                        </div>
+                    </div>
+                    {difficultyReports.length > 10 && (
+                        <button
+                            onClick={() => setShowAllReports(!showAllReports)}
+                            className="flex items-center gap-2 px-4 py-2 bg-secondary/50 hover:bg-secondary rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-border/50"
+                        >
+                            {showAllReports ? 'Show Less' : `View All (${difficultyReports.length})`}
+                            <Filter className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+
+                {fetchingReports ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
+                        {[1, 2].map(i => (
+                            <div key={i} className="h-48 bg-secondary/20 rounded-2xl border border-border" />
+                        ))}
+                    </div>
+                ) : difficultyReports.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {visibleReports.map((report, index) => (
+                            <motion.div
+                                key={report.materialId}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: (index % 10) * 0.05 }}
+                                className="card p-6 border-t-4 border-red-500 bg-gradient-to-br from-card to-red-500/5 hover:shadow-2xl transition-all"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-[10px] font-black rounded uppercase">
+                                                High Friction
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+                                                {report.subjectName}
+                                            </span>
+                                        </div>
+                                        <h3 className="text-lg font-black leading-tight text-foreground line-clamp-1">
+                                            {report.materialTitle}
+                                        </h3>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-2xl font-black text-red-500">{report.escalationCount}</div>
+                                        <div className="text-[10px] text-muted-foreground font-bold uppercase">Escalations</div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 pt-4 border-t border-border/50">
+                                    <div className="bg-background/50 p-3 rounded-lg border border-border/50">
+                                        <p className="text-sm font-medium leading-relaxed italic text-muted-foreground">
+                                            "{report.aiAnalysis?.summary || "Analyzing student struggles..."}"
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Student Pain Points</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {report.aiAnalysis?.painPoints?.map((point, i) => (
+                                                <span key={i} className="text-[10px] px-2 py-1 bg-secondary border border-border rounded-md font-bold">
+                                                    {point}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <div className="flex items-center gap-2 text-emerald-500 mb-1">
+                                            <Award className="w-3.5 h-3.5" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest">Faculty Recommendation</p>
+                                        </div>
+                                        <p className="text-xs font-semibold text-foreground">
+                                            {report.aiAnalysis?.recommendation}
+                                        </p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="card p-12 text-center border-dashed border-2">
+                        <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Award className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-lg font-bold mb-1">Material Harmony</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                            No significant material friction detected. Students are navigating your resources smoothly!
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
-

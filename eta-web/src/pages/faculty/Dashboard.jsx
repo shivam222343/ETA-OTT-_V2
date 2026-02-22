@@ -48,6 +48,7 @@ export default function FacultyDashboard() {
     const [institutions, setInstitutions] = useState([]);
     const [courses, setCourses] = useState([]);
     const [recentContent, setRecentContent] = useState([]);
+    const [totalContentCount, setTotalContentCount] = useState(0);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showJoinModal, setShowJoinModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -67,7 +68,7 @@ export default function FacultyDashboard() {
         { label: 'Institutions', value: institutions.length, icon: Building2, color: 'text-blue-500' },
         { label: 'Branches', value: user?.branchIds?.length || 0, icon: GraduationCap, color: 'text-purple-500' },
         { label: 'Active Courses', value: courses.length, icon: BookOpen, color: 'text-green-500' },
-        { label: 'Total Content', value: recentContent.length, icon: FileText, color: 'text-orange-500' },
+        { label: 'Total Content', value: totalContentCount, icon: FileText, color: 'text-orange-500' },
     ];
 
     // Fetch dashboard data
@@ -96,6 +97,7 @@ export default function FacultyDashboard() {
             setInstitutions(instRes.data.data.institutions || []);
             setCourses((courseRes.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
             setRecentContent((contentRes.data.data.recentContent || []).filter(c => c.courseId?.code !== 'YT_DISCOVERY'));
+            setTotalContentCount(contentRes.data.data.totalContent || 0);
         } catch (error) {
             console.error('Fetch dashboard data error:', error);
             // Don't show toast for recent content failure if other parts work
