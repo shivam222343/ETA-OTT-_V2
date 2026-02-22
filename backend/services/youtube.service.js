@@ -37,9 +37,8 @@ export const searchVideos = async (query, options = {}) => {
             return cachedResults;
         }
 
-        const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://18.207.157.130:8000';
         // Call Python ML service for advanced semantic search
-        const response = await axios.post(`${ML_SERVICE_URL}/search-videos`, {
+        const response = await axios.post('http://localhost:8000/search-videos', {
             query: query.substring(0, 200),
             selected_text: selectedText.substring(0, 500),
             transcript_segment: transcriptSegment.substring(0, 500),

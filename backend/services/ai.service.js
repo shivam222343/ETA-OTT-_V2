@@ -130,8 +130,7 @@ const calculateConfidence = (params) => {
 // Helper to get embeddings from ML service (Rule 1)
 const getEmbedding = async (text) => {
     try {
-        const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://18.207.157.130:8000';
-        const response = await axios.post(`${ML_SERVICE_URL}/embeddings`, { text });
+        const response = await axios.post('http://localhost:8000/embeddings', { text });
         return response.data.success ? response.data.embedding : null;
     } catch (error) {
         console.warn('Embedding service unavailable:', error.message);
