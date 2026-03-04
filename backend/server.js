@@ -27,6 +27,9 @@ import analyticsRoutes from './routes/analytics.routes.js';
 import aiUtilityRoutes from './routes/ai.routes.js';
 import youtubeRoutes from './routes/youtube.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import quizRoutes from './routes/quiz.routes.js';
+import peerRoutes from './routes/peer.routes.js';
+import intelligenceRoutes from './routes/intelligence.routes.js';
 
 // Import WebSocket service
 import { initializeWebSocket } from './services/websocket.service.js';
@@ -152,6 +155,9 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiUtilityRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/quiz', quizRoutes);
+app.use('/api/peer', peerRoutes);
+app.use('/api/intelligence', intelligenceRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

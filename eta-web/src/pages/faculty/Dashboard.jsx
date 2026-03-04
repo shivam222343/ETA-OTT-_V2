@@ -22,7 +22,9 @@ import {
     Key,
     Video,
     Trash2,
-    User
+    User,
+    Sparkles,
+    Brain
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
@@ -37,6 +39,8 @@ const InstitutionCard = lazy(() => import('../../components/faculty/InstitutionC
 const FacultyDoubtManager = lazy(() => import('../../components/faculty/FacultyDoubtManager'));
 const ProfileSection = lazy(() => import('../../components/ProfileSection'));
 const FacultyAnalytics = lazy(() => import('../../components/faculty/FacultyAnalytics'));
+const FacultyReviewPeer = lazy(() => import('../../components/faculty/FacultyReviewPeer'));
+const FacultyIntelligenceHub = lazy(() => import('../../components/faculty/FacultyIntelligenceHub'));
 
 export default function FacultyDashboard() {
     const { user, logout } = useAuth();
@@ -60,12 +64,14 @@ export default function FacultyDashboard() {
         { id: 'content', label: 'Content', icon: Upload },
         { id: 'doubts', label: 'Doubts', icon: MessageSquare },
         { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+        { id: 'peer-solutions', label: 'Peer Solutions', icon: Sparkles },
+        { id: 'student-intelligence', label: 'Monitoring Hub', icon: Brain },
         { id: 'profile', label: 'Profile', icon: User },
     ];
 
     const stats = [
         { label: 'Institutions', value: institutions.length, icon: Building2, color: 'text-blue-500' },
-        { label: 'Branches', value: user?.branchIds?.length || 0, icon: GraduationCap, color: 'text-purple-500' },
+        { label: 'Branches', value: institutions.reduce((acc, inst) => acc + (inst.stats?.totalBranches || 0), 0), icon: GraduationCap, color: 'text-purple-500' },
         { label: 'Active Courses', value: courses.length, icon: BookOpen, color: 'text-green-500' },
         { label: 'Total Content', value: recentContent.length, icon: FileText, color: 'text-orange-500' },
     ];
@@ -629,6 +635,18 @@ export default function FacultyDashboard() {
                                 <FacultyAnalytics institutions={institutions} courses={courses} />
                             </Suspense>
                         </div>
+                    )}
+
+                    {activeTab === 'peer-solutions' && (
+                        <Suspense fallback={<Loader />}>
+                            <FacultyReviewPeer user={user} courses={courses} />
+                        </Suspense>
+                    )}
+
+                    {activeTab === 'student-intelligence' && (
+                        <Suspense fallback={<Loader />}>
+                            <FacultyIntelligenceHub />
+                        </Suspense>
                     )}
 
                     {activeTab === 'profile' && (
