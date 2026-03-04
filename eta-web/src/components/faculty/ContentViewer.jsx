@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Download, Share2, Maximize2, Minimize2,
     FileText, Video, Info, BarChart3, List, MessageCircle,
-    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock
+    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock, Brain
 } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -11,6 +11,9 @@ import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
 import { useSocket } from '../../hooks/useSocket';
 const AITutor = lazy(() => import('../AITutor'));
+const QuizConfigModal = lazy(() => import('../student/QuizConfigModal'));
+const QuizPlayer = lazy(() => import('../student/QuizPlayer'));
+const QuizResults = lazy(() => import('../student/QuizResults'));
 import Loader from '../Loader';
 import ThemeToggle from '../ThemeToggle';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
@@ -46,6 +49,9 @@ export default function ContentViewer({ isOpen, onClose, content }) {
     const [aiSidebarWidth, setAISidebarWidth] = useState(400); // Default width
     const [isResizingSidebar, setIsResizingSidebar] = useState(false);
     const [isTabsVisible, setIsTabsVisible] = useState(true);
+    const [showQuizConfig, setShowQuizConfig] = useState(false);
+    const [activeQuiz, setActiveQuiz] = useState(null);
+    const [quizResults, setQuizResults] = useState(null);
     const socket = useSocket();
 
     // Sync local content with prop
@@ -924,6 +930,15 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                                 )}
                             </div>
                         )}
+                        {/* Test Your Knowledge Button */}
+                        <button
+                            onClick={() => setShowQuizConfig(true)}
+                            className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-bold flex items-center gap-2 transition-all border border-primary/20"
+                            title="Generate a quiz based on your progress"
+                        >
+                            <Brain className="w-4 h-4" />
+                            <span className="hidden lg:inline">Test Your Knowledge</span>
+                        </button>
                         <div className="hidden sm:block w-px h-6 bg-border mx-1" />
                         <ThemeToggle />
                         <div className="hidden sm:block w-px h-6 bg-border mx-1" />
@@ -1155,6 +1170,50 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                     </div>
                 )}
             </motion.div>
+
+            {/* Quiz Modals */}
+            <Suspense fallback={null}>
+                {showQuizConfig && !activeQuiz && !quizResults && (
+                    <QuizConfigModal
+                        isOpen={showQuizConfig}
+                        onClose={() => setShowQuizConfig(false)}
+                        onQuizReady={(quiz) => {
+                            setShowQuizConfig(false);
+                            setActiveQuiz(quiz);
+                        }}
+                        content={localContent || content}
+                        contentProgress={{
+                            type: (localContent?.type || content?.type || 'pdf').toLowerCase(),
+                            currentPage: pageNumber || 1,
+                            totalPages: numPages || content?.file?.pages || 1,
+                            currentTimestamp: playerRef.current?.getCurrentTime?.() || 0,
+                            totalDuration: content?.file?.duration || playerRef.current?.getDuration?.() || 0
+                        }}
+                    />
+                )}
+
+                {activeQuiz && !quizResults && (
+                    <QuizPlayer
+                        quiz={activeQuiz}
+                        onComplete={(completedQuiz) => {
+                            setActiveQuiz(null);
+                            setQuizResults(completedQuiz);
+                        }}
+                        onClose={() => setActiveQuiz(null)}
+                    />
+                )}
+
+                {quizResults && (
+                    <QuizResults
+                        quiz={quizResults}
+                        onRetake={() => {
+                            setQuizResults(null);
+                            setShowQuizConfig(true);
+                        }}
+                        onClose={() => setQuizResults(null)}
+                    />
+                )}
+            </Suspense>
         </div>
     );
 }
