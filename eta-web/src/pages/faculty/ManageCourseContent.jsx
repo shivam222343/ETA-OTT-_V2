@@ -217,12 +217,12 @@ export default function ManageCourseContent() {
     const stats = getContentStats();
 
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-background flex flex-col">
             {/* Header */}
             <div className="bg-card border-b sticky top-0 z-10">
                 <div className="container mx-auto px-4 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                    <div className="header-responsive">
+                        <div className="header-title-group">
                             <button
                                 onClick={() => navigate(-1)}
                                 className="p-2 hover:bg-secondary rounded-lg transition-colors"
@@ -234,29 +234,22 @@ export default function ManageCourseContent() {
                                     <BookOpen className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
-                                    <h1 className="text-2xl font-bold">{course.name}</h1>
-                                    <p className="text-sm text-muted-foreground">
+                                    <h1 className="text-xl md:text-2xl font-bold truncate max-w-[200px] sm:max-w-[400px] md:max-w-none">{course.name}</h1>
+                                    <p className="text-xs md:text-sm text-muted-foreground truncate">
                                         Manage learning materials
                                     </p>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="header-actions-group">
                             <ThemeToggle />
-                            <button
-                                onClick={() => setShowGraph(true)}
-                                className="btn-secondary flex items-center gap-2"
-                                title="View Knowledge Graph"
-                            >
-                                <Network className="w-4 h-4" />
-                                <span className="hidden md:inline">Knowledge Graph</span>
+                            <button onClick={() => setShowGraph(true)} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-secondary/30 hover:bg-secondary/50 rounded-xl transition-all shadow-sm">
+                                <Network className="w-4 h-4 text-primary" />
+                                <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Knowledge Graph</span>
                             </button>
-                            <button
-                                onClick={() => setShowUploadModal(true)}
-                                className="btn-primary flex items-center gap-2"
-                            >
+                            <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl transition-all shadow-lg shadow-primary/20">
                                 <Plus className="w-4 h-4" />
-                                Upload Content
+                                <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Upload Resource</span>
                             </button>
                         </div>
                     </div>

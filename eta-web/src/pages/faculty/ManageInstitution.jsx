@@ -55,7 +55,7 @@ export default function ManageInstitution() {
 
             // Fetch courses for this institution
             const coursesResponse = await apiClient.get(`/courses/institution/${institutionId}`);
-            setCourses(coursesResponse.data.data.courses || []);
+            setCourses((coursesResponse.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
         } catch (error) {
             console.error('Fetch institution data error:', error);
             toast.error('Failed to load institution data');
@@ -147,8 +147,8 @@ export default function ManageInstitution() {
             {/* Header */}
             <div className="bg-card border-b sticky top-0 z-10">
                 <div className="container mx-auto px-4 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                    <div className="header-responsive">
+                        <div className="header-title-group">
                             <button
                                 onClick={() => navigate('/faculty/dashboard')}
                                 className="p-2 hover:bg-secondary rounded-lg transition-colors"
@@ -168,18 +168,18 @@ export default function ManageInstitution() {
                                     </div>
                                 )}
                                 <div>
-                                    <h1 className="text-2xl font-bold">{institution.name}</h1>
-                                    <p className="text-sm text-muted-foreground">
+                                    <h1 className="text-xl md:text-2xl font-bold">{institution.name}</h1>
+                                    <p className="text-xs md:text-sm text-muted-foreground">
                                         Manage branches and courses
                                     </p>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="header-actions-group">
                             <ThemeToggle />
                             <button className="btn-secondary flex items-center gap-2">
                                 <Settings className="w-4 h-4" />
-                                Settings
+                                <span className="btn-text">Settings</span>
                             </button>
                         </div>
                     </div>
@@ -298,14 +298,14 @@ export default function ManageInstitution() {
                 {/* Branches Tab */}
                 {activeTab === 'branches' && (
                     <div>
-                        <div className="flex items-center justify-between mb-6">
+                        <div className="header-responsive mb-6">
                             <h2 className="text-xl font-semibold">Branches</h2>
                             <button
                                 onClick={() => setShowCreateBranch(true)}
                                 className="btn-primary flex items-center gap-2"
                             >
                                 <Plus className="w-4 h-4" />
-                                Add Branch
+                                <span className="btn-text">Add Branch</span>
                             </button>
                         </div>
 
@@ -342,7 +342,7 @@ export default function ManageInstitution() {
                 {/* Courses Tab */}
                 {activeTab === 'courses' && (
                     <div>
-                        <div className="flex items-center justify-between mb-6">
+                        <div className="header-responsive mb-6">
                             <h2 className="text-xl font-semibold">Courses</h2>
                             <button
                                 onClick={() => setShowCreateCourse(true)}
@@ -350,7 +350,7 @@ export default function ManageInstitution() {
                                 disabled={branches.length === 0}
                             >
                                 <Plus className="w-4 h-4" />
-                                Add Course
+                                <span className="btn-text">Add Course</span>
                             </button>
                         </div>
 

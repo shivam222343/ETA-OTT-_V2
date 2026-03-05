@@ -44,8 +44,10 @@ export default function SignupPage() {
 
         setLoading(true);
         try {
-            await signup(formData.email, formData.password, formData.name, formData.role);
-            navigate('/dashboard');
+            const user = await signup(formData.email, formData.password, formData.name, formData.role);
+            if (user?.role === 'faculty') navigate('/faculty/dashboard');
+            else if (user?.role === 'student') navigate('/student/dashboard');
+            else navigate('/dashboard');
         } catch (error) {
             console.error('Signup failed:', error);
         } finally {
@@ -56,8 +58,15 @@ export default function SignupPage() {
     const handleGoogleSignup = async () => {
         setLoading(true);
         try {
-            await loginWithGoogle(formData.role);
-            navigate('/dashboard');
+            const user = await loginWithGoogle(formData.role);
+            if (user?.role !== formData.role) {
+                toast.error(`Account Conflict: You already have an account as a ${user.role}. Please switch to the ${user.role} role on the Login page.`);
+                localStorage.removeItem('token');
+                return;
+            }
+            if (user?.role === 'faculty') navigate('/faculty/dashboard');
+            else if (user?.role === 'student') navigate('/student/dashboard');
+            else navigate('/dashboard');
         } catch (error) {
             console.error('Google signup failed:', error);
         } finally {
@@ -96,8 +105,8 @@ export default function SignupPage() {
                                 type="button"
                                 onClick={() => setFormData({ ...formData, role: 'student' })}
                                 className={`p-6 rounded-xl border-2 transition-all ${formData.role === 'student'
-                                        ? 'border-primary bg-primary/10 shadow-lg scale-105'
-                                        : 'border-border hover:border-primary/50 hover:bg-secondary'
+                                    ? 'border-primary bg-primary/10 shadow-lg scale-105'
+                                    : 'border-border hover:border-primary/50 hover:bg-secondary'
                                     }`}
                             >
                                 <GraduationCap className="w-8 h-8 mx-auto mb-3 text-primary" />
@@ -108,8 +117,8 @@ export default function SignupPage() {
                                 type="button"
                                 onClick={() => setFormData({ ...formData, role: 'faculty' })}
                                 className={`p-6 rounded-xl border-2 transition-all ${formData.role === 'faculty'
-                                        ? 'border-primary bg-primary/10 shadow-lg scale-105'
-                                        : 'border-border hover:border-primary/50 hover:bg-secondary'
+                                    ? 'border-primary bg-primary/10 shadow-lg scale-105'
+                                    : 'border-border hover:border-primary/50 hover:bg-secondary'
                                     }`}
                             >
                                 <Users className="w-8 h-8 mx-auto mb-3 text-primary" />
@@ -164,8 +173,8 @@ export default function SignupPage() {
                                     type="button"
                                     onClick={() => setFormData({ ...formData, role: 'student' })}
                                     className={`p-4 rounded-lg border-2 transition-all ${formData.role === 'student'
-                                            ? 'border-primary bg-primary/10'
-                                            : 'border-border hover:border-primary/50'
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
                                         }`}
                                 >
                                     <GraduationCap className="w-6 h-6 mx-auto mb-2" />
@@ -175,8 +184,8 @@ export default function SignupPage() {
                                     type="button"
                                     onClick={() => setFormData({ ...formData, role: 'faculty' })}
                                     className={`p-4 rounded-lg border-2 transition-all ${formData.role === 'faculty'
-                                            ? 'border-primary bg-primary/10'
-                                            : 'border-border hover:border-primary/50'
+                                        ? 'border-primary bg-primary/10'
+                                        : 'border-border hover:border-primary/50'
                                         }`}
                                 >
                                     <Users className="w-6 h-6 mx-auto mb-2" />

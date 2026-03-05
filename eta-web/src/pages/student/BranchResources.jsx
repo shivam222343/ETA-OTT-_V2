@@ -32,7 +32,7 @@ export default function BranchResources() {
                 apiClient.get(`/courses/branch/${branchId}`)
             ]);
             setBranch(branchRes.data.data.branch);
-            setCourses(coursesRes.data.data.courses || []);
+            setCourses((coursesRes.data.data.courses || []).filter(c => c.code !== 'YT_DISCOVERY'));
         } catch (error) {
             console.error('Fetch branch resources error:', error);
             setError(true);
@@ -80,8 +80,8 @@ export default function BranchResources() {
         <div className="min-h-screen bg-background text-foreground">
             {/* Header */}
             <div className="bg-card border-b border-border sticky top-0 z-30">
-                <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                <div className="max-w-7xl mx-auto px-6 py-4 header-responsive">
+                    <div className="header-title-group">
                         <button
                             onClick={() => navigate('/dashboard')}
                             className="p-2 hover:bg-secondary rounded-xl transition-colors"
@@ -95,13 +95,15 @@ export default function BranchResources() {
                             </p>
                         </div>
                     </div>
-                    <ThemeToggle />
+                    <div className="header-actions-group">
+                        <ThemeToggle />
+                    </div>
                 </div>
             </div>
 
             <div className="max-w-7xl mx-auto p-6 space-y-8">
                 {/* Search and Filters */}
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div className="header-responsive">
                     <div className="relative w-full md:w-96">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -112,10 +114,10 @@ export default function BranchResources() {
                             className="input pl-10 w-full bg-secondary/30 border-none focus:ring-1 focus:ring-primary/40"
                         />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="header-actions-group">
                         <button className="flex items-center gap-2 px-4 py-2 border border-border rounded-xl text-sm font-medium hover:bg-secondary transition-colors">
                             <Filter className="w-4 h-4" />
-                            Filter
+                            <span className="btn-text">Filter</span>
                         </button>
                     </div>
                 </div>

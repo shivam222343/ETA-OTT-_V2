@@ -1,4 +1,5 @@
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
+import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -12,14 +13,12 @@ const pollyClient = new PollyClient({
 
 /**
  * Synthesize speech using AWS Polly (Indian Accent)
- * @param {string} text - Text to convert to speech
- * @param {string} voiceId - Polly Voice ID (Default: Aditi)
- * @returns {Promise<Buffer>} - Audio buffer
  */
 export const synthesizePolly = async (text, voiceId = "Aditi") => {
     try {
         if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-            throw new Error("AWS Credentials missing. Please add them to .env");
+            console.warn("AWS Polly skipped: Credentials missing in .env");
+            return null; // Return null to indicate failure without crashing
         }
 
         const command = new SynthesizeSpeechCommand({
@@ -30,8 +29,6 @@ export const synthesizePolly = async (text, voiceId = "Aditi") => {
         });
 
         const response = await pollyClient.send(command);
-
-        // Convert stream to buffer
         const chunks = [];
         for await (const chunk of response.AudioStream) {
             chunks.push(chunk);
@@ -43,6 +40,47 @@ export const synthesizePolly = async (text, voiceId = "Aditi") => {
     }
 };
 
+/**
+ * Synthesize speech using ElevenLabs (Human-like Voice)
+ * Improved with automatic fallback to Polly on failure
+ */
+export const synthesizeElevenLabs = async (text, voiceId = process.env.ELEVENLABS_VOICE_ID) => {
+    try {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ElevenLabs API Key missing");
+
+        const response = await axios.post(
+            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+            {
+                text,
+                model_id: "eleven_multilingual_v2", // Best for Hindi/English mix
+                voice_settings: {
+                    stability: 0.6, // Slightly increased for better Hindi fluency
+                    similarity_boost: 0.75,
+                    style: 0.0,
+                    use_speaker_boost: true
+                }
+            },
+            {
+                headers: {
+                    'xi-api-key': apiKey,
+                    'Content-Type': 'application/json'
+                },
+                responseType: 'arraybuffer'
+            }
+        );
+
+        return Buffer.from(response.data);
+    } catch (error) {
+        const errorDetail = error.response?.data ? error.response.data.toString() : error.message;
+        console.warn("ElevenLabs TTS failed, falling back to AWS Polly:", errorDetail);
+
+        // Fallback to Polly (Aditi is great for Hindi/English)
+        return await synthesizePolly(text, "Aditi");
+    }
+};
+
 export default {
-    synthesizePolly
+    synthesizePolly,
+    synthesizeElevenLabs
 };

@@ -1,0 +1,125 @@
+/**
+ * Resource Card - Sharp Corner Styles
+ * Ensures no border radius anywhere in the card
+ */
+
+/* Force sharp corners on all card elements */
+.resource-card,
+.resource-card * {
+    border-radius: 0 !important;
+}
+
+/* Ensure smooth transitions */
+.resource-card {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Typography - Inter font family for modern look */
+.resource-card {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Letter spacing for uppercase text */
+.resource-card [class*="tracking-"] {
+    letter-spacing: 0.1em;
+}
+
+/* Ensure crisp text rendering */
+.resource-card h3 {
+    text-rendering: optimizeLegibility;
+}
+
+/* Smooth hover state transitions */
+.resource-card .group-hover\:text-primary {
+    transition: color 0.3s ease;
+}
+
+.resource-card .group-hover\:bg-primary\/15 {
+    transition: background-color 0.3s ease;
+}
+
+.resource-card .group-hover\:border-primary\/40 {
+    transition: border-color 0.3s ease;
+}
+
+/* Shadow elevation on hover */
+.resource-card:hover {
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06),
+        0 12px 24px -4px rgba(0, 0, 0, 0.15);
+}
+
+/* Dark mode shadow enhancement */
+.dark .resource-card:hover {
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.3),
+        0 2px 4px -1px rgba(0, 0, 0, 0.2),
+        0 12px 24px -4px rgba(0, 0, 0, 0.4);
+}
+
+/* Ensure icon container is perfectly square */
+.resource-card [class*="w-20"] {
+    aspect-ratio: 1 / 1;
+}
+
+/* File size badge - sharp edges */
+.resource-card [class*="px-2.5"][class*="py-1"] {
+    border-radius: 0;
+}
+
+/* Left border hover indicator */
+.resource-card .scale-y-0 {
+    transform-origin: top;
+}
+
+/* Prevent any accidental rounding */
+* {
+    border-radius: 0;
+}
+
+/* Grid layout optimization */
+@media (min-width: 768px) {
+    .resource-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .resource-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Responsive card sizing */
+.resource-card {
+    min-height: 320px;
+    max-width: 100%;
+}
+
+/* Ensure proper text truncation */
+.resource-card .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Divider styling */
+.resource-card [class*="h-px"] {
+    height: 1px;
+}
+
+/* Category indicator bar */
+.resource-card [class*="w-1"][class*="h-4"] {
+    width: 4px;
+    height: 16px;
+}
+
+/* Hover indicator bar */
+.resource-card [class*="w-0.5"] {
+    width: 2px;
+}

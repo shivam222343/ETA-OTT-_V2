@@ -1,9 +1,11 @@
 fastapi
 uvicorn
-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision
 torchaudio
+sentence-transformers
+transformers
 pillow
 pymupdf
 openai-whisper
@@ -19,3 +21,4 @@ playwright
 html2text
 fpdf2
 python-docx
+google-api-python-client
