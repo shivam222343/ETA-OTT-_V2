@@ -116,60 +116,107 @@ sequenceDiagram
 
 ## 🛠️ Tech Stack
 
+> 📄 For a detailed per-library breakdown with version numbers and project-specific usage, see [`Documents/TechStack.md`](./Documents/TechStack.md).
+
 ### Frontend — `eta-web`
 
 | Category | Technology | Version |
 | :--- | :--- | :--- |
 | Framework | React | 19.2 |
 | Bundler | Vite | 7.3 |
-| Styling | Tailwind CSS | 3.4 |
+| Styling | Tailwind CSS + PostCSS + Autoprefixer | 3.4 |
 | Animations | Framer Motion | 10.x |
 | Animations (Advanced) | GSAP | 3.12 |
 | State Management | Zustand | 4.4 |
 | Routing | React Router DOM | 6.21 |
-| Auth | Firebase | 10.7 |
+| HTTP Client | Axios | 1.6 |
+| Auth | Firebase (Google OAuth) | 10.7 |
+| Real-Time | socket.io-client | 4.6 |
 | Graph Visualization | react-force-graph-2d + d3-force | — |
+| Charts & Analytics | Recharts | 3.7 |
 | PDF Viewer | react-pdf | 7.6 |
 | Video Player | react-player | 2.13 |
-| Markdown | react-markdown + remark-gfm | — |
-| QR Code | qrcode.react + html5-qrcode | — |
+| Markdown Rendering | react-markdown + remark-gfm | — |
+| QR Code (Generate + Scan) | qrcode.react + html5-qrcode | — |
 | Toasts | react-hot-toast | 2.4 |
 | Icons | lucide-react | 0.303 |
-| Real-Time | socket.io-client | 4.6 |
+| Scroll Detection | react-intersection-observer | 10.0 |
+| Linting | ESLint + react-hooks + react-refresh plugins | 9.39 |
 
 ### Backend — `backend`
 
 | Category | Technology | Version |
 | :--- | :--- | :--- |
-| Runtime | Node.js (ESM) | 18+ |
+| Runtime | Node.js (ESM) | 22 |
 | Framework | Express | 4.18 |
-| Database ORM | Mongoose | 8.0 |
-| Graph DB Driver | neo4j-driver | 5.14 |
-| Cache | Redis (node-redis) | 4.6 |
-| Auth | Firebase Admin | 12.0 |
-| Media Storage | Cloudinary | 1.41 |
 | Real-Time | Socket.io | 4.6 |
-| TTS | AWS SDK — Polly | 3.988 |
-| Security | Helmet, express-rate-limit, CORS | — |
-| File Upload | Multer + multer-storage-cloudinary | — |
-| QR Generation | qrcode | 1.5 |
+| Database (Document) | Mongoose (MongoDB) | 8.0 |
+| Database (Graph) | neo4j-driver (Neo4j) | 5.14 |
+| Database (Vector) | Qdrant (via Axios REST) | — |
+| Cache | Redis (node-redis) | 4.6 |
+| Auth (Server) | Firebase Admin SDK | 12.0 |
+| Auth (Local) | bcryptjs + jsonwebtoken (JWT) | — |
+| Security | Helmet, CORS, express-rate-limit | — |
+| Media Storage | Cloudinary + multer-storage-cloudinary | 1.41 |
+| File Upload | Multer | 1.4 |
+| TTS (Primary) | AWS SDK — Polly (`@aws-sdk/client-polly`) | 3.988 |
+| TTS (Human-like) | ElevenLabs API (`eleven_multilingual_v2`) | — |
+| LLM Integration | Groq API (Llama 3.3 70B) via Axios | — |
+| Video Processing | fluent-ffmpeg + @ffmpeg-installer/ffmpeg | 2.1 |
 | PDF Parsing | pdf-parse | 1.1 |
-| Video Processing | fluent-ffmpeg | 2.1 |
+| PDF Generation | Puppeteer (headless Chrome) | 24.37 |
+| Web Scraping | Cheerio | 1.2 |
+| Markdown → HTML | markdown-it | 14.1 |
+| YouTube Search (Fallback) | yt-search | 2.13 |
+| QR Generation | qrcode | 1.5 |
+| Unique IDs | nanoid | 5.0 |
 | Logging | Morgan | 1.10 |
+| Dev: Auto-reload | Nodemon | 3.0 |
+| Dev: Testing | Jest | 29.7 |
 
 ### ML Service — `ml-service`
 
 | Category | Technology |
 | :--- | :--- |
 | Framework | FastAPI + Uvicorn |
+| Validation | Pydantic |
+| Deep Learning | PyTorch (CPU-only: torch, torchvision, torchaudio) |
+| Sentence Embeddings | Sentence Transformers (`all-MiniLM-L6-v2`) |
+| NLP Infrastructure | Hugging Face Transformers |
+| Speech-to-Text | OpenAI Whisper |
 | PDF Extraction | PyMuPDF (fitz) |
-| Video/Audio Transcription | OpenAI Whisper |
+| Video Processing | MoviePy |
 | YouTube Download | yt-dlp |
-| Web Scraping | Playwright + BeautifulSoup4 + html2text |
-| Deep Learning | PyTorch, Transformers (HuggingFace) |
-| Document Generation | fpdf2, python-docx |
-| Media Processing | moviepy, Pillow |
+| Web Scraping (JS-heavy) | Playwright (headless Chromium) |
+| Web Scraping (static) | BeautifulSoup4 + html2text |
+| Document Generation | fpdf2 (PDF), python-docx (Word) |
+| Image Processing | Pillow |
 | Cloud Storage | Cloudinary (Python SDK) |
+| YouTube API | google-api-python-client (YouTube Data API v3) |
+| Environment | python-dotenv, python-multipart, requests |
+
+### Deployment & Containerization
+
+| Category | Technology |
+| :--- | :--- |
+| Containerization | Docker (multi-stage builds) |
+| Orchestration | Docker Compose (2 files: app + ML) |
+| CI/CD | GitHub Actions → Docker Hub → AWS EC2 |
+| Web Server / Reverse Proxy | Nginx (gzip, security headers, WebSocket proxy) |
+| Container Registry | Docker Hub |
+| SSH Deployment | appleboy/ssh-action |
+| Cloud Hosting | AWS EC2 (×2 instances: App Server + ML Server) |
+| Frontend Hosting (Alt) | Netlify |
+
+### External AI APIs
+
+| API | Use in Project |
+| :--- | :--- |
+| Groq API (`llama-3.3-70b-versatile`) | Primary LLM — AI doubt resolution with RAG context |
+| ElevenLabs (`eleven_multilingual_v2`) | Human-like TTS (Hindi/English), falls back to Polly |
+| AWS Polly (Neural) | TTS with Indian accent (Aditi voice) |
+| YouTube Data API v3 | Semantic video search & recommendations |
+| Firebase Auth | Google OAuth for user authentication |
 
 ### Mobile — `eta-mobile`
 
