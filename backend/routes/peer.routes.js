@@ -96,9 +96,22 @@ router.get('/golden', authenticate, attachUser, async (req, res) => {
         const query = { status: { $ne: 'removed' } };
 
         if (courseId) query.courseId = courseId;
-        if (branchId) query.branchId = branchId;
-        else if (req.dbUser.branchIds?.length > 0) {
-            query.branchId = { $in: req.dbUser.branchIds };
+
+        // Restrict branch access for students
+        if (req.dbUser.role === 'student') {
+            const allowedBranchIds = req.dbUser.branchIds.map(id => id.toString());
+            if (branchId) {
+                if (allowedBranchIds.includes(branchId)) {
+                    query.branchId = branchId;
+                } else {
+                    return res.status(403).json({ success: false, message: 'Unauthorized branch' });
+                }
+            } else {
+                query.branchId = { $in: req.dbUser.branchIds };
+            }
+        } else {
+            // Admin/Faculty can filter by any provided branchId
+            if (branchId) query.branchId = branchId;
         }
 
         const peerDoubts = await PeerDoubt.find(query)
@@ -143,9 +156,9 @@ router.get('/leaderboard', authenticate, async (req, res) => {
  * GET /api/peer/faculty/student-stats
  * Faculty view of all students' peer learning progress
  */
-router.get('/faculty/student-stats', authenticate, async (req, res) => {
+router.get('/faculty/student-stats', authenticate, attachUser, async (req, res) => {
     try {
-        if (req.user.role !== 'faculty') {
+        if (req.dbUser.role !== 'faculty' && req.dbUser.role !== 'admin') {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 
@@ -186,6 +199,14 @@ router.post('/:id/solve', authenticate, attachUser, uploadWithThumbnail, async (
 
         const peerDoubt = await PeerDoubt.findById(id);
         if (!peerDoubt) return res.status(404).json({ success: false, message: 'Question not found' });
+
+        if (['solved', 'removed', 'review'].includes(peerDoubt.status) && req.dbUser.role === 'student') {
+            // Let it fall through if it's already in review and they just want to submit (existing solution check will catch them)
+            // But if it's solved or removed, nobody can solve it.
+            if (['solved', 'removed'].includes(peerDoubt.status)) {
+                return res.status(400).json({ success: false, message: 'This doubt is no longer accepting solutions' });
+            }
+        }
 
         if (peerDoubt.studentId.toString() === req.dbUser._id.toString()) {
             return res.status(400).json({ success: false, message: 'You cannot solve your own question' });
@@ -276,14 +297,20 @@ router.patch('/:id/review', authenticate, attachUser, async (req, res) => {
             solution.feedback = feedback;
 
             if (status === 'accepted') {
-                solution.creditsAwarded = points || peerDoubt.rewardPoints;
-                peerDoubt.status = 'solved';
-                peerDoubt.acceptedSolutionId = solutionId;
+                // Only award credits if this doubt isn't already solved by this solution
+                if (peerDoubt.status !== 'solved' || peerDoubt.acceptedSolutionId?.toString() !== solutionId) {
+                    solution.creditsAwarded = points || peerDoubt.rewardPoints;
+                    peerDoubt.status = 'solved';
+                    peerDoubt.acceptedSolutionId = solutionId;
 
-                // Award credits to the solver
-                await User.findByIdAndUpdate(solution.studentId, {
-                    $inc: { 'rewards.credits': solution.creditsAwarded }
-                });
+                    // Award credits to the solver
+                    await User.findByIdAndUpdate(solution.studentId, {
+                        $inc: { 'rewards.credits': solution.creditsAwarded }
+                    });
+                } else {
+                    // Already accepted, just update other fields if necessary
+                    solution.creditsAwarded = points || peerDoubt.rewardPoints;
+                }
             }
         }
 

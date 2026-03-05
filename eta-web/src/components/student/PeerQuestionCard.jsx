@@ -114,7 +114,7 @@ const PeerQuestionCard = ({ question, onSolve, onEdit, onDelete, isFaculty = fal
 
                     {question.status !== 'solved' && !isOwner && (
                         <button
-                            onClick={() => onSolve(question)}
+                            onClick={() => onSolve?.(question)}
                             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-xs font-bold hover:shadow-[0_0_15px_rgba(var(--primary),0.3)] transition-all"
                         >
                             Solve Now
@@ -124,7 +124,7 @@ const PeerQuestionCard = ({ question, onSolve, onEdit, onDelete, isFaculty = fal
 
                     {question.status === 'solved' && (
                         <button
-                            onClick={() => onSolve(question)}
+                            onClick={() => onSolve?.(question)}
                             className="flex items-center gap-1 text-blue-500 text-xs font-bold bg-blue-500/10 px-3 py-2 rounded-xl border border-blue-500/20 hover:bg-blue-500/20 transition-all"
                         >
                             <CheckCircle2 className="w-4 h-4" />

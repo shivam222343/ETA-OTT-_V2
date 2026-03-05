@@ -30,8 +30,12 @@ export default function FacultyStudentData() {
     }, []);
 
     const filteredStudents = students.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            s.email.toLowerCase().includes(searchQuery.toLowerCase());
+        const name = s.name?.toString() || '';
+        const email = s.email?.toString() || '';
+        const query = searchQuery.toLowerCase();
+
+        const matchesSearch = name.toLowerCase().includes(query) ||
+            email.toLowerCase().includes(query);
         return matchesSearch;
     }).sort((a, b) => b.credits - a.credits);
 

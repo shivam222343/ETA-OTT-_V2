@@ -49,23 +49,26 @@ export default function FacultyAnalytics() {
     const [data, setData] = useState(null);
 
     useEffect(() => {
+        let isMounted = true;
         const fetchFacultyAnalytics = async () => {
             const userId = user?._id || user?.id;
             if (!userId) {
-                setLoading(false);
+                if (isMounted) setLoading(false);
                 return;
             }
             try {
+                if (isMounted) setLoading(true);
                 const response = await apiClient.get(`/analytics/faculty/${userId}`);
-                setData(response.data.data);
+                if (isMounted) setData(response.data.data);
             } catch (error) {
                 console.error('Faculty Analytics fetch error:', error);
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
 
         fetchFacultyAnalytics();
+        return () => { isMounted = false; };
     }, [user?._id, user?.id]);
 
     if (loading) {

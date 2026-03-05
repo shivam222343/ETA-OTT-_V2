@@ -72,6 +72,7 @@ export default function FacultyDashboard() {
     const stats = [
         { label: 'Institutions', value: institutions.length, icon: Building2, color: 'text-blue-500' },
         { label: 'Branches', value: institutions.reduce((acc, inst) => acc + (inst.stats?.totalBranches || 0), 0), icon: GraduationCap, color: 'text-purple-500' },
+        //{ label: 'Branches', value: user?.branchIds?.length || 0, icon: GraduationCap, color: 'text-purple-500' },
         { label: 'Active Courses', value: courses.length, icon: BookOpen, color: 'text-green-500' },
         { label: 'Total Content', value: recentContent.length, icon: FileText, color: 'text-orange-500' },
     ];
@@ -88,7 +89,7 @@ export default function FacultyDashboard() {
         handleResize(); // Initial call
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, [activeTab]);
+    }, []);
 
     const fetchDashboardData = async () => {
         setLoading(true);

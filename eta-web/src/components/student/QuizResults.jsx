@@ -4,6 +4,7 @@ import {
     Trophy, CheckCircle2, XCircle, ChevronDown, ChevronUp,
     ArrowLeft, RotateCcw, Clock, Target, Brain, Sparkles, BarChart3
 } from 'lucide-react';
+import { renderMarkdown } from '../../utils/markdown';
 
 export default function QuizResults({ quiz, onRetake, onClose, onViewPerformance }) {
     const [expandedQ, setExpandedQ] = useState(null);
@@ -156,11 +157,7 @@ export default function QuizResults({ quiz, onRetake, onClose, onViewPerformance
                                     <div
                                         className="prose prose-sm dark:prose-invert max-w-none pt-4 text-sm leading-relaxed"
                                         dangerouslySetInnerHTML={{
-                                            __html: aiAnalysis
-                                                .replace(/### (.*)/g, '<h3 class="text-base font-bold mt-4 mb-2">$1</h3>')
-                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                                .replace(/^- (.*)/gm, '<li class="ml-4">$1</li>')
-                                                .replace(/\n/g, '<br/>')
+                                            __html: renderMarkdown(aiAnalysis)
                                         }}
                                     />
                                 </motion.div>

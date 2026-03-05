@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
 import Loader from '../Loader';
+import { renderMarkdown } from '../../utils/markdown';
 
 export default function PerformanceDashboard({ user }) {
     const [loading, setLoading] = useState(true);
@@ -311,11 +312,7 @@ export default function PerformanceDashboard({ user }) {
                             <div
                                 className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed"
                                 dangerouslySetInnerHTML={{
-                                    __html: aiAnalysis
-                                        .replace(/### (.*)/g, '<h3 class="text-base font-bold mt-4 mb-2">$1</h3>')
-                                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                        .replace(/^- (.*)/gm, '<li class="ml-4">$1</li>')
-                                        .replace(/\n/g, '<br/>')
+                                    __html: renderMarkdown(aiAnalysis)
                                 }}
                             />
                         ) : (

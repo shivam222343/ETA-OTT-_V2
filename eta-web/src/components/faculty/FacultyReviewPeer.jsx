@@ -87,7 +87,7 @@ const FacultyReviewPeer = ({ user, courses = [] }) => {
         }
     };
 
-    const handleReview = async (id, solutionId, status, points = 15, feedback = '') => {
+    const handleReview = async (id, solutionId, status, points = null, feedback = '') => {
         setModeratingId(solutionId);
         try {
             await apiClient.patch(`/peer/${id}/review`, {
@@ -318,7 +318,7 @@ const FacultyReviewPeer = ({ user, courses = [] }) => {
                                                             <div className="flex items-center gap-2">
                                                                 <button
                                                                     disabled={moderatingId === s._id}
-                                                                    onClick={() => handleReview(q._id, s._id, 'accepted')}
+                                                                    onClick={() => handleReview(q._id, s._id, 'accepted', q.rewardPoints)}
                                                                     className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-600 transition-colors shadow-sm"
                                                                 >
                                                                     <CheckCircle2 className="w-3.5 h-3.5" />

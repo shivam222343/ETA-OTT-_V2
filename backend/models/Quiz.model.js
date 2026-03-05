@@ -5,15 +5,25 @@ const questionSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    options: [{
-        type: String,
-        required: true
-    }],
-    correctAnswer: {
-        type: Number, // Index of correct option (0-3)
+    options: {
+        type: [String],
         required: true,
-        min: 0,
-        max: 3
+        validate: {
+            validator: function (v) {
+                return v && v.length >= 2;
+            },
+            message: "At least 2 options are required"
+        }
+    },
+    correctAnswer: {
+        type: Number,
+        required: true,
+        validate: {
+            validator: function (v) {
+                return v >= 0 && v < (this.options?.length || 4);
+            },
+            message: "Correct answer must be a valid option index"
+        }
     },
     explanation: {
         type: String,
@@ -30,8 +40,14 @@ const questionSchema = new mongoose.Schema({
     },
     // Student's response
     studentAnswer: {
-        type: Number, // Index of selected option
-        default: null
+        type: Number,
+        validate: {
+            validator: function (v) {
+                if (v === null || v === undefined) return true;
+                return v >= 0 && v < (this.options?.length || 4);
+            },
+            message: "Student answer must be a valid option index"
+        }
     },
     isCorrect: {
         type: Boolean,

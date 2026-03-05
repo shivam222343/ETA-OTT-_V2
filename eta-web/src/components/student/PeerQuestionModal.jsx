@@ -22,6 +22,7 @@ const PeerQuestionModal = ({ isOpen, onClose, mode = 'ask', question = null, cou
     });
     const [selectedImage, setSelectedImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
+    const [monthlyChances, setMonthlyChances] = useState(3);
 
     useEffect(() => {
         if (question && mode === 'solve') {
@@ -37,8 +38,21 @@ const PeerQuestionModal = ({ isOpen, onClose, mode = 'ask', question = null, cou
             });
             setSelectedImage(null);
             setImagePreview(null);
+
+            // Only fetch chances for students
+            if (!isFaculty) {
+                const fetchChances = async () => {
+                    try {
+                        const { data } = await apiClient.get('/peer/chances/me');
+                        if (data.success) setMonthlyChances(data.remaining);
+                    } catch (err) {
+                        console.error('Failed to fetch chances');
+                    }
+                };
+                fetchChances();
+            }
         }
-    }, [question, mode, isOpen]);
+    }, [question, mode, isOpen, isFaculty]);
 
     const handleImageChange = (e) => {
         const file = e.target.files[0];
@@ -71,6 +85,7 @@ const PeerQuestionModal = ({ isOpen, onClose, mode = 'ask', question = null, cou
 
             if (mode === 'ask') {
                 if (!formData.courseId) throw new Error('Please select a course');
+                if (!currentBranchId) throw new Error('Branch information missing. Please re-login.');
                 data.append('branchId', currentBranchId);
                 await apiClient.post('/peer/ask', data, {
                     headers: { 'Content-Type': 'multipart/form-data' }
@@ -196,7 +211,7 @@ const PeerQuestionModal = ({ isOpen, onClose, mode = 'ask', question = null, cou
                                             <div className="flex items-center gap-3 p-4 bg-primary/5 border border-primary/10 rounded-xl">
                                                 <AlertCircle className="w-5 h-5 text-primary shrink-0" />
                                                 <p className="text-[10px] leading-tight text-primary font-bold uppercase tracking-wider">
-                                                    You have {3} chances remaining this month.
+                                                    You have {monthlyChances} chances remaining this month.
                                                 </p>
                                             </div>
                                         )}

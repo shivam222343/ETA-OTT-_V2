@@ -38,8 +38,8 @@ const aggregateStudentMetrics = async (studentId) => {
     let learnerType = 'Steady Progressor';
     if (stats.avgScore > 85 && doubtCount < 5) learnerType = 'Quick Learner';
     else if (stats.avgScore > 75 && doubtCount > 10) learnerType = 'Deep Diver';
-    else if (stats.avgScore < 50 && stats.totalQuizzes > 5) learnerType = 'Slow Learner';
-    else if (peerStats.totalAccepted > 3) learnerType = 'Collaborative Master';
+    else if (stats.avgScore < 50 && stats.totalQuizzes > 5) learnerType = 'Surface Learner';
+    else if (peerStats.totalAccepted > 3) learnerType = 'Deep Diver';
 
     return {
         metrics: {
@@ -63,10 +63,21 @@ export const getClassIntelligence = async (req, res) => {
         const { institutionId } = req.query; // Faculty can filter by institution
 
         // Find all students in faculty's institutions
-        const user = await User.findById(req.dbUser._id);
+        const user = req.dbUser;
         const query = { role: 'student' };
-        if (user.institutionIds && user.institutionIds.length > 0) {
+
+        // Filter by institutionId if provided and authorized, otherwise use all user's institutions
+        if (institutionId) {
+            if (user.institutionIds.some(id => id.equals(institutionId)) || user.role === 'admin') {
+                query.institutionIds = institutionId;
+            } else {
+                return res.status(403).json({ success: false, message: 'You are not authorized for this institution' });
+            }
+        } else if (user.institutionIds && user.institutionIds.length > 0) {
             query.institutionIds = { $in: user.institutionIds };
+        } else if (user.role !== 'admin') {
+            // Non-admin with no institutions should see nothing
+            return res.json({ success: true, data: [] });
         }
 
         const students = await User.find(query).select('profile email rewards progressStats');
@@ -121,6 +132,20 @@ export const getStudentDeepAnalysis = async (req, res) => {
         const { id } = req.params;
         const { refreshAI } = req.query;
 
+        const student = await User.findById(id);
+        if (!student) {
+            return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+
+        // Authorization Check: Must share at least one institution or be the student themselves
+        const isAuthorized = req.dbUser._id.equals(id) ||
+            req.dbUser.role === 'admin' ||
+            req.dbUser.institutionIds.some(instId => student.institutionIds.some(sid => sid.equals(instId)));
+
+        if (!isAuthorized) {
+            return res.status(403).json({ success: false, message: 'Unauthorized to access this student\'s analysis' });
+        }
+
         let intel = await StudentIntelligence.findOne({ studentId: id }).populate('studentId', 'profile email');
         if (!intel) {
             const basic = await aggregateStudentMetrics(id);
@@ -129,7 +154,7 @@ export const getStudentDeepAnalysis = async (req, res) => {
 
         // Trigger Deep AI Analysis (Uses tokens, but only on demand/periodic)
         if (refreshAI === 'true' || !intel.analysis?.narrativeSummary) {
-            const student = await User.findById(id);
+            // Use the student object we already fetched above for auth
             const doubts = await Doubt.find({ studentId: id }).limit(10).select('query aiResponse');
             const language = req.query.language || 'english';
 

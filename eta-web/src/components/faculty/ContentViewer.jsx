@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Download, Share2, Maximize2, Minimize2,
     FileText, Video, Info, BarChart3, List, MessageCircle,
-    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock, Brain
+    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock, Brain, Code
 } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import { Document, Page, pdfjs } from 'react-pdf';

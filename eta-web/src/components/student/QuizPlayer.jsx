@@ -22,10 +22,10 @@ export default function QuizPlayer({ quiz, onComplete, onClose }) {
 
     // Timer countdown
     useEffect(() => {
-        timerRef.current = setInterval(() => {
+        const timer = setInterval(() => {
             setTimeLeft(prev => {
                 if (prev <= 1) {
-                    clearInterval(timerRef.current);
+                    clearInterval(timer);
                     handleSubmit(true); // Auto-submit on timeout
                     return 0;
                 }
@@ -33,8 +33,8 @@ export default function QuizPlayer({ quiz, onComplete, onClose }) {
             });
         }, 1000);
 
-        return () => clearInterval(timerRef.current);
-    }, []);
+        return () => clearInterval(timer);
+    }, [handleSubmit]);
 
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);

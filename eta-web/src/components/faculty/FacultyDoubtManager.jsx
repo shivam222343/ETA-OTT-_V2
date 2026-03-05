@@ -44,8 +44,18 @@ export default function FacultyDoubtManager({ courses }) {
     useEffect(() => {
         if (selectedCourse) {
             fetchEscalatedDoubts();
+        } else if (courses && courses.length === 0) {
+            setLoading(false);
         }
-    }, [selectedCourse]);
+    }, [selectedCourse, courses]);
+
+    useEffect(() => {
+        if (courses && courses.length > 0 && !selectedCourse) {
+            setSelectedCourse(courses[0]._id);
+        } else if (courses && courses.length === 0) {
+            setLoading(false);
+        }
+    }, [courses]);
 
     const fetchEscalatedDoubts = async () => {
         setLoading(true);

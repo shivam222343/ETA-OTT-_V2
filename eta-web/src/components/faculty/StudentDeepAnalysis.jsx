@@ -38,26 +38,26 @@ export default function StudentDeepAnalysis({ studentId, onClose, onRefresh }) {
         fetchDetail();
     }, [studentId]);
 
-    if (loading) return (
+    if (loading || !data) return (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-xl z-[100] flex items-center justify-center">
             <Loader />
         </div>
     );
 
     const masteryData = [
-        { subject: 'Visual', A: 80, fullMark: 100 },
-        { subject: 'Theory', A: 65, fullMark: 100 },
-        { subject: 'Active', A: 90, fullMark: 100 },
-        { subject: 'Logic', A: 75, fullMark: 100 },
-        { subject: 'Recall', A: 85, fullMark: 100 },
+        { subject: 'Quiz Avg', A: data.metrics?.avgQuizScore || 0, fullMark: 100 },
+        { subject: 'Completion', A: data.metrics?.quizCompletionRate || 0, fullMark: 100 },
+        { subject: 'Inquiry', A: Math.min(100, (data.metrics?.doubtsToSolutionRatio || 0) * 10), fullMark: 100 },
+        { subject: 'Peer Help', A: data.persona?.collaborationScore || 0, fullMark: 100 },
+        { subject: 'Retention', A: Math.min(100, (data.persona?.collaborationScore || 50) * 1.2), fullMark: 100 },
     ];
 
-    const trendData = [
-        { name: 'Week 1', score: 65 },
-        { name: 'Week 2', score: 72 },
-        { name: 'Week 3', score: 68 },
-        { name: 'Week 4', score: 85 },
-    ];
+    const trendData = data.trends && data.trends.length > 0
+        ? data.trends.map((t, idx) => ({ name: t.date ? new Date(t.date).toLocaleDateString([], { month: 'short', day: 'numeric' }) : `Day ${idx + 1}`, score: t.score }))
+        : [
+            { name: 'Start', score: 0 },
+            { name: 'Current', score: data.metrics?.avgQuizScore || 0 },
+        ];
 
     return (
         <AnimatePresence>

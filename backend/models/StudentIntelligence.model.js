@@ -63,6 +63,14 @@ const studentIntelligenceSchema = new mongoose.Schema({
 studentIntelligenceSchema.index({ 'persona.learnerType': 1 });
 studentIntelligenceSchema.index({ 'metrics.avgQuizScore': -1 });
 
+// Trim trends array to prevent unbounded growth (keep last 365 days)
+studentIntelligenceSchema.pre('save', function (next) {
+    if (this.trends && this.trends.length > 365) {
+        this.trends = this.trends.slice(-365);
+    }
+    next();
+});
+
 const StudentIntelligence = mongoose.model('StudentIntelligence', studentIntelligenceSchema);
 
 export default StudentIntelligence;

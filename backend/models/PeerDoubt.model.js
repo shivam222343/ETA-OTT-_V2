@@ -18,7 +18,8 @@ const solutionSchema = new mongoose.Schema({
     },
     creditsAwarded: {
         type: Number,
-        default: 0
+        default: 0,
+        min: 0
     },
     feedback: String,
     attachments: [{
@@ -77,7 +78,8 @@ const peerDoubtSchema = new mongoose.Schema({
     },
     rewardPoints: {
         type: Number,
-        default: 10 // Basic reward for solving
+        default: 10,
+        min: 0
     },
     solutions: [solutionSchema],
     acceptedSolutionId: {

@@ -68,10 +68,22 @@ router.post('/generate', authenticate, attachUser, async (req, res) => {
         // Validate question count
         const qCount = Math.min(Math.max(parseInt(questionCount) || 15, 10), 30);
 
-        // Fetch content with extracted data
+        // Fetch content with authoritative course and branch data
         const content = await Content.findById(contentId);
         if (!content) {
             return res.status(404).json({ success: false, message: 'Content not found' });
+        }
+
+        // Derive authoritative courseId
+        const derivedCourseId = content.courseId;
+
+        // Authorization Check
+        const isAuthorized = req.dbUser.role === 'admin' ||
+            (req.dbUser.role === 'faculty' && req.dbUser.institutionIds.some(id => id.equals(content.institutionId))) ||
+            (req.dbUser.role === 'student' && req.dbUser.branchIds.some(id => content.branchIds.some(bid => bid.equals(id))));
+
+        if (!isAuthorized) {
+            return res.status(403).json({ success: false, message: 'You are not authorized to access this content quiz' });
         }
 
         // 1. Get content text up to student's progress
@@ -204,7 +216,7 @@ Generate ${qCount} MCQ questions based on the above content. Include 2-3 questio
 
         const quiz = await Quiz.create({
             studentId,
-            courseId,
+            courseId: derivedCourseId,
             contentId,
             contentProgress: {
                 type: contentProgress?.type || content.type,
@@ -265,9 +277,12 @@ router.post('/:quizId/submit', authenticate, attachUser, async (req, res) => {
         // Grade each question
         let correctCount = 0;
         quiz.questions.forEach((q, idx) => {
-            const studentAnswer = answers?.[idx] ?? null;
+            const rawAnswer = answers?.[idx];
+            const studentAnswer = (rawAnswer !== undefined && rawAnswer !== null) ? Number(rawAnswer) : null;
+
             q.studentAnswer = studentAnswer;
-            q.isCorrect = studentAnswer === q.correctAnswer;
+            // Coerce to number to handle potential string inputs from client
+            q.isCorrect = studentAnswer !== null && Number(studentAnswer) === Number(q.correctAnswer);
             if (q.isCorrect) correctCount++;
         });
 
@@ -390,12 +405,14 @@ router.get('/history/me', authenticate, attachUser, async (req, res) => {
         if (courseId) filter.courseId = courseId;
         if (contentId) filter.contentId = contentId;
 
+        const sanitizedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+
         const quizzes = await Quiz.find(filter)
             .select('courseId contentId config.totalQuestions score percentage timeTaken status createdAt completedAt contentProgress')
             .populate('contentId', 'title type')
             .populate('courseId', 'name code')
             .sort({ createdAt: -1 })
-            .limit(parseInt(limit));
+            .limit(sanitizedLimit);
 
         res.json({
             success: true,
