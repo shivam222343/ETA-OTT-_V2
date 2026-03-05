@@ -6,7 +6,7 @@ import {
     Plus, Search, Trophy, Clock,
     ArrowRight, Star, GraduationCap,
     Grid, List, Filter, FileText, Video,
-    Layers, Building2, Users, Play, Youtube
+    Layers, Building2, Users, Play, Youtube, BarChart3
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -24,6 +24,8 @@ const ContentViewer = lazy(() => import('../../components/faculty/ContentViewer'
 const ExtractedInfoModal = lazy(() => import('../../components/faculty/ExtractedInfoModal'));
 const YouTubeFeed = lazy(() => import('../../components/student/YouTubeFeed'));
 const LearningProgress = lazy(() => import('../../components/student/LearningProgress'));
+const PerformanceDashboard = lazy(() => import('../../components/student/PerformanceDashboard'));
+const PeerLearningHub = lazy(() => import('../../pages/student/PeerLearningHub'));
 export default function StudentDashboard() {
     const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -180,6 +182,8 @@ export default function StudentDashboard() {
         { id: 'content', icon: FileText, label: 'Recent Uploads' },
         { id: 'doubts', icon: MessageSquare, label: 'My Doubts' },
         { id: 'analytics', icon: Trophy, label: 'Learning Progress' },
+        { id: 'peer', icon: Users, label: 'Peer Learning' },
+        { id: 'performance', icon: BarChart3, label: 'Quiz Performance' },
         { id: 'profile', icon: User, label: 'My Profile' },
     ];
 
@@ -683,6 +687,30 @@ export default function StudentDashboard() {
                                 </div>
                                 <Suspense fallback={<Loader fullScreen={false} />}>
                                     <LearningProgress user={user} />
+                                </Suspense>
+                            </div>
+                        )}
+
+                        {activeTab === 'peer' && (
+                            <Suspense fallback={<Loader fullScreen={false} />}>
+                                <PeerLearningHub user={user} />
+                            </Suspense>
+                        )}
+
+                        {activeTab === 'performance' && (
+                            <div className="space-y-6">
+                                <div className="header-dashboard">
+                                    <h3 className="text-xl font-black tracking-tighter flex items-center gap-2">
+                                        <BarChart3 className="w-6 h-6 text-primary" />
+                                        Quiz Performance
+                                    </h3>
+                                    <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] bg-secondary/50 px-4 py-2 rounded-xl border border-border/50">
+                                        <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary),0.5)]"></span>
+                                        AI-Powered Insights
+                                    </div>
+                                </div>
+                                <Suspense fallback={<Loader fullScreen={false} />}>
+                                    <PerformanceDashboard user={user} />
                                 </Suspense>
                             </div>
                         )}

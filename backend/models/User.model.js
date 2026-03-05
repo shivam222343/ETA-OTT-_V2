@@ -134,6 +134,26 @@ const userSchema = new mongoose.Schema({
             type: Number,
             default: 0
         }
+    },
+    rewards: {
+        credits: {
+            type: Number,
+            default: 0
+        },
+        badges: [{
+            name: String,
+            date: { type: Date, default: Date.now }
+        }]
+    },
+    limits: {
+        peerDoubtsThisMonth: {
+            type: Number,
+            default: 0
+        },
+        lastPeerDoubtReset: {
+            type: Date,
+            default: Date.now
+        }
     }
 }, {
     timestamps: true

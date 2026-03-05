@@ -338,8 +338,12 @@ Act as if you are pointing your finger at that box and teaching the student abou
 
         // If it's a greeting, keep it brief and helpful
         if (isGreeting && query.length < 20) {
+            const greeting = language === 'hindi'
+                ? `[[INTRO]] \nNamaste ${userName}! \n\nMain aapka AI Tutor hoon. Aap abhi **${displayContext}** dekh rahe hain. \n\nAap is resource mein se koi bhi part select kar sakte hain (using the pencil icon) ya mujhse directly doubts pooch sakte hain. \n\nMain aapki kaise madad kar sakta hoon? 🚀`
+                : `[[INTRO]] \nHello ${userName}! \n\nI am your AI Tutor. You are currently viewing **${displayContext}**. \n\nYou can select any part of this resource (using the pencil icon) or ask me doubts directly. \n\nHow can I help you today? 🚀`;
+
             return {
-                explanation: `[[INTRO]] \nNamaste ${userName}! \n\nMain aapka AI Tutor hoon. Aap abhi **${displayContext}** dekh rahe hain. \n\nAap is resource mein se koi bhi part select kar sakte hain (using the pencil icon) ya mujhse directly doubts pooch sakte hain. \n\nMain aapki kaise madad kar sakta hoon? 🚀`,
+                explanation: greeting,
                 confidence: 100,
                 source: 'system_response',
                 isConversational: true
@@ -348,8 +352,12 @@ Act as if you are pointing your finger at that box and teaching the student abou
 
         // Check for "explain" requests without selection - ONLY if they are vague
         if (isVagueExplain && !hasSelection) {
+            const response = language === 'hindi'
+                ? `[[INTRO]] \nJarur ${userName}! \n\nMain aapko **${displayContext}** ke baare mein explain kar sakta hoon. \n\n### Please Select an Area first 📝 \n\nBeheter explanation ke liye, kripya screen par **pencil icon** par click karein aur us area ko highlight karein jiske baare mein aap pooch rahe hain. \n\nJaise hi aap select karenge, main us specific part ko details ke saath samjha dunga!`
+                : `[[INTRO]] \nCertainly ${userName}! \n\nI can explain **${displayContext}** to you. \n\n### Please Select an Area first 📝 \n\nFor a better explanation, please click on the **pencil icon** and highlight the area you're asking about. \n\nOnce you select it, I will explain that specific part in detail!`;
+
             return {
-                explanation: `[[INTRO]] \nJarur ${userName}! \n\nMain aapko **${displayContext}** ke baare mein explain kar sakta hoon. \n\n### Please Select an Area first 📝 \n\nBeheter explanation ke liye, kripya screen par **pencil icon** par click karein aur us area ko highlight karein jiske baare mein aap pooch rahe hain. \n\nJaise hi aap select karenge, main us specific part ko details ke saath samjha dunga!`,
+                explanation: response,
                 confidence: 90,
                 source: 'system_response',
                 isConversational: true
@@ -357,12 +365,18 @@ Act as if you are pointing your finger at that box and teaching the student abou
         }
 
         // Advanced Language Detection & Instruction (Rule 9/11)
-        const hindiKeywords = /hindi|samajha|batao|kaise|kya|kyun|hindi|hinglish|karo|do|kaun|kab|apka|tumhara|aap|hai|hoon|tha|the|thi/i;
-        const isHindiDetected = hindiKeywords.test(query) || language.toLowerCase() === 'hindi';
-        const detectedLanguage = isHindiDetected ? 'hindi' : 'english';
+        const hindiKeywords = /\b(hindi|samajha|batao|kaise|kya|kyun|hinglish|karo|kaun|kab|apka|tumhara|aap|hai|hoon|tha|the|thi)\b/i;
+        // Only auto-detect Hindi if the user hasn't explicitly set language to english in their profile/preferences.
+        // Assuming if language is explicitly passed as 'english', we should prioritize that and only override if strong Hindi is detected,
+        // but 'language' parameter defaults to 'english'. So we should just use word boundaries to avoid false positives.
+        const isHindiDetected = hindiKeywords.test(query) || language.toLowerCase() === 'hindi' || language.toLowerCase() === 'hinglish';
+        const detectedLanguage = (language.toLowerCase() === 'hindi' || language.toLowerCase() === 'hinglish' || isHindiDetected) ? 'hindi' : 'english';
+
+        // If the user explicitly requested English via parameter, force it despite detection.
+        const finalLanguage = language.toLowerCase() === 'english' ? 'english' : detectedLanguage;
 
         let languageInstruction = "";
-        if (detectedLanguage === 'hindi') {
+        if (finalLanguage === 'hindi') {
             languageInstruction = `
 - **LANGUAGE**: STRICT HINGLISH ONLY (Hindi words written in English script).
 - **CRITICAL**: Use Hindi vocabulary but ONLY Latin letters. Absolutely NO Devanagari (हिंदी नहीं).
