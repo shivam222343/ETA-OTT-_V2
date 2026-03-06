@@ -16,10 +16,7 @@ const pollyClient = new PollyClient({
  */
 export const synthesizePolly = async (text, voiceId = "Aditi") => {
     try {
-        if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-            console.warn("AWS Polly skipped: Credentials missing in .env");
-            return null; // Return null to indicate failure without crashing
-        }
+        throw new Error("AWS Polly credentials missing in .env");
 
         const command = new SynthesizeSpeechCommand({
             Engine: "neural",

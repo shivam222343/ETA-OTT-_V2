@@ -23,6 +23,10 @@ router.post('/tts', authenticate, async (req, res) => {
             audioBuffer = await ttsService.synthesizePolly(text, voiceId || "Aditi");
         }
 
+        if (!audioBuffer) {
+            throw new Error('Failed to generate audio stream');
+        }
+
         res.set({
             'Content-Type': 'audio/mpeg',
             'Content-Length': audioBuffer.length
