@@ -20,6 +20,32 @@ export default function QuizPlayer({ quiz, onComplete, onClose }) {
     const totalQuestions = questions.length;
     const currentQ = questions[currentIndex];
 
+    const answeredCount = Object.keys(answers).length;
+
+    const handleSubmit = useCallback(async (isTimeout = false) => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        clearInterval(timerRef.current);
+
+        const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
+
+        try {
+            const response = await apiClient.post(`/quiz/${quiz._id}/submit`, {
+                answers,
+                timeTaken
+            });
+
+            if (response.data.success) {
+                toast.success(isTimeout ? 'Time\'s up! Quiz submitted.' : 'Quiz submitted! 🎉');
+                onComplete(response.data.data.quiz);
+            }
+        } catch (error) {
+            console.error('Quiz submit error:', error);
+            toast.error('Failed to submit quiz');
+            setIsSubmitting(false);
+        }
+    }, [answers, quiz, isSubmitting, onComplete]);
+
     // Timer countdown
     useEffect(() => {
         const timer = setInterval(() => {
@@ -60,32 +86,6 @@ export default function QuizPlayer({ quiz, onComplete, onClose }) {
     const goPrev = () => {
         if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
     };
-
-    const answeredCount = Object.keys(answers).length;
-
-    const handleSubmit = useCallback(async (isTimeout = false) => {
-        if (isSubmitting) return;
-        setIsSubmitting(true);
-        clearInterval(timerRef.current);
-
-        const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-
-        try {
-            const response = await apiClient.post(`/quiz/${quiz._id}/submit`, {
-                answers,
-                timeTaken
-            });
-
-            if (response.data.success) {
-                toast.success(isTimeout ? 'Time\'s up! Quiz submitted.' : 'Quiz submitted! 🎉');
-                onComplete(response.data.data.quiz);
-            }
-        } catch (error) {
-            console.error('Quiz submit error:', error);
-            toast.error('Failed to submit quiz');
-            setIsSubmitting(false);
-        }
-    }, [answers, quiz, isSubmitting, onComplete]);
 
     const getDifficultyBadge = (diff) => {
         const styles = {

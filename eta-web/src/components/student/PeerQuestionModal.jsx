@@ -4,7 +4,7 @@ import {
     X, Send, Award, MessageSquare,
     AlertCircle, CheckCircle2, User,
     Clock, Sparkles, BookOpen, Brain,
-    ArrowRight, Image as ImageIcon, Upload, Trash2, Star
+    ArrowRight, Image as ImageIcon, Upload, Trash2, Star, ChevronDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
@@ -43,8 +43,8 @@ const PeerQuestionModal = ({ isOpen, onClose, mode = 'ask', question = null, cou
             if (!isFaculty) {
                 const fetchChances = async () => {
                     try {
-                        const { data } = await apiClient.get('/peer/chances/me');
-                        if (data.success) setMonthlyChances(data.remaining);
+                        const { data } = await apiClient.get('/peer/stats');
+                        if (data.success) setMonthlyChances(data.data.remainingChances);
                     } catch (err) {
                         console.error('Failed to fetch chances');
                     }

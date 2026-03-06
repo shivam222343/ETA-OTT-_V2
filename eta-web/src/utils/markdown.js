@@ -2,7 +2,8 @@
  * Simple utility to convert basic markdown to sanitized HTML.
  * Prevents XSS by escaping HTML tags and only allowing specific safe formatting.
  */
-export const sanitizeAndParseMarkdown = (text) => {
+// Export with both named and default to ensure compatibility and trigger Vite reload
+export const renderMarkdown = (text) => {
     if (!text) return '';
 
     // 1. Escape all HTML to prevent script injection
