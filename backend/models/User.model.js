@@ -77,6 +77,15 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Branch'
     }],
+    subscriptions: [{
+        institutionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Institution' },
+        branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+        courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+        plan: { type: String, enum: ['free', 'premium'], default: 'free' },
+        aiCredits: { type: Number, default: 5 }, // 5 free AI questions for free tier
+        enrolledAt: { type: Date, default: Date.now },
+        isActive: { type: Boolean, default: true }
+    }],
     progressStats: {
         coursesEnrolled: {
             type: Number,

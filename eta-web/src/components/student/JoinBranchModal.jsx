@@ -19,18 +19,24 @@ export default function JoinBranchModal({ isOpen, onClose, onSuccess }) {
 
         setLoading(true);
         try {
-            const response = await apiClient.post('/branches/join', { accessKey: key });
-            setJoinedData(response.data.data.branch);
-            toast.success('Successfully joined branch!');
-
+            // Use the universal join endpoint which handles both individual secret keys and public access keys
+            const response = await apiClient.post('/institutions/join-with-key', { secretKey: key });
+            
+            // Handle response which might contain institution or branch data
+            const joinResult = response.data.data;
+            setJoinedData(joinResult.branch || joinResult.institution);
+            
+            toast.success(response.data.message || 'Successfully joined!');
+            
             // Wait a bit to show success state before closing
             setTimeout(() => {
-                onSuccess(response.data.data.branch);
+                onSuccess(joinResult.branch || joinResult.institution);
                 handleClose();
             }, 2000);
         } catch (error) {
-            console.error('Join branch error:', error);
-            toast.error(error.response?.data?.message || 'Failed to join branch');
+            console.error('Join error:', error);
+            const message = error.response?.data?.message || 'Failed to join';
+            toast.error(message);
         } finally {
             setLoading(false);
         }

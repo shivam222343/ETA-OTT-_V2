@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
     ArrowLeft, BookOpen, Upload, FileText, Video, Image,
-    Filter, Search, Plus, Download, Eye
+    Filter, Search, Plus, Download, Eye, Users, ShieldCheck, Mail, Crown,
+    Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
@@ -11,6 +12,7 @@ import UploadContentModal from '../../components/faculty/UploadContentModal';
 import ContentCard from '../../components/faculty/ContentCard';
 import ContentViewer from '../../components/faculty/ContentViewer';
 import CourseKnowledgeGraph from '../../components/faculty/CourseKnowledgeGraph';
+import CouponManager from '../../components/faculty/CouponManager';
 import { Network } from 'lucide-react';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
@@ -23,6 +25,11 @@ export default function ManageCourseContent() {
     const [course, setCourse] = useState(null);
     const [content, setContent] = useState([]);
     const [filteredContent, setFilteredContent] = useState([]);
+    const [participants, setParticipants] = useState([]);
+    const [participantsLoading, setParticipantsLoading] = useState(false);
+
+    // Tab state
+    const [activeTab, setActiveTab] = useState('resources');
 
     // Modal states
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -47,6 +54,7 @@ export default function ManageCourseContent() {
 
     useEffect(() => {
         fetchCourseData();
+        fetchParticipants();
     }, [courseId]);
 
     // Polling for processing items
@@ -99,6 +107,19 @@ export default function ManageCourseContent() {
             toast.error('Failed to load course data');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchParticipants = async () => {
+        setParticipantsLoading(true);
+        try {
+            const response = await apiClient.get(`/courses/${courseId}/participants`);
+            setParticipants(response.data.data.participants || []);
+        } catch (error) {
+            console.error('Fetch participants error:', error);
+            toast.error('Failed to load participants');
+        } finally {
+            setParticipantsLoading(false);
         }
     };
 
@@ -187,6 +208,50 @@ export default function ManageCourseContent() {
         }
     };
 
+    const handleTogglePremium = async (contentItem) => {
+        try {
+            const newStatus = !contentItem.accessRules?.isPremium;
+            await apiClient.put(`/content/${contentItem._id}`, {
+                isPremium: newStatus
+            });
+
+            setContent(content.map(c =>
+                c._id === contentItem._id
+                    ? { ...c, accessRules: { ...c.accessRules, isPremium: newStatus } }
+                    : c
+            ));
+
+            toast.success(`Content is now ${newStatus ? 'PREMIUM' : 'FREE'}`);
+        } catch (error) {
+            console.error('Toggle premium error:', error);
+            toast.error('Failed to update content access level');
+        }
+    };
+
+    const handleTogglePlan = async (participant) => {
+        try {
+            const currentPlan = participant.subscription?.plan || 'free';
+            const newPlan = currentPlan === 'premium' ? 'free' : 'premium';
+            
+            const response = await apiClient.patch(
+                `/institutions/${course.institutionId._id || course.institutionId}/members/${participant._id}/plan`,
+                { plan: newPlan }
+            );
+
+            if (response.data.success) {
+                setParticipants(participants.map(p => 
+                    p._id === participant._id 
+                        ? { ...p, subscription: { ...p.subscription, plan: newPlan } }
+                        : p
+                ));
+                toast.success(`Student upgraded to ${newPlan.toUpperCase()}`);
+            }
+        } catch (error) {
+            console.error('Toggle plan error:', error);
+            toast.error('Failed to update student plan');
+        }
+    };
+
     const getContentStats = () => {
         const stats = {
             total: content.length,
@@ -252,6 +317,50 @@ export default function ManageCourseContent() {
                                 <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Upload Resource</span>
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="bg-card border-b">
+                <div className="container mx-auto px-4">
+                    <div className="flex items-center gap-6">
+                        <button
+                            onClick={() => setActiveTab('resources')}
+                            className={`py-4 px-2 text-sm font-bold uppercase tracking-wider transition-all relative ${activeTab === 'resources' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <BookOpen className="w-4 h-4" />
+                                Resources
+                            </div>
+                            {activeTab === 'resources' && (
+                                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('participants')}
+                            className={`py-4 px-2 text-sm font-bold uppercase tracking-wider transition-all relative ${activeTab === 'participants' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4" />
+                                Participants ({participants.length})
+                            </div>
+                            {activeTab === 'participants' && (
+                                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('coupons')}
+                            className={`py-4 px-2 text-sm font-bold uppercase tracking-wider transition-all relative ${activeTab === 'coupons' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Tag className="w-4 h-4" />
+                                Coupons
+                            </div>
+                            {activeTab === 'coupons' && (
+                                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -344,83 +453,188 @@ export default function ManageCourseContent() {
                     </motion.div>
                 </div>
 
-                {/* Filters */}
-                <div className="card p-4 mb-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="md:col-span-2">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search content..."
-                                    className="input w-full pl-10"
-                                />
+                {/* Content Tab */}
+                {activeTab === 'resources' && (
+                    <>
+                        {/* Filters */}
+                        <div className="card p-4 mb-6">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-2">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder="Search content..."
+                                            className="input w-full pl-10"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <select
+                                        value={typeFilter}
+                                        onChange={(e) => setTypeFilter(e.target.value)}
+                                        className="input w-full"
+                                    >
+                                        <option value="all">All Types</option>
+                                        <option value="pdf">PDF</option>
+                                        <option value="video">Video</option>
+                                        <option value="presentation">Presentation</option>
+                                        <option value="document">Document</option>
+                                        <option value="image">Image</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <select
+                                        value={difficultyFilter}
+                                        onChange={(e) => setDifficultyFilter(e.target.value)}
+                                        className="input w-full"
+                                    >
+                                        <option value="all">All Levels</option>
+                                        <option value="beginner">Beginner</option>
+                                        <option value="intermediate">Intermediate</option>
+                                        <option value="advanced">Advanced</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <select
-                                value={typeFilter}
-                                onChange={(e) => setTypeFilter(e.target.value)}
-                                className="input w-full"
-                            >
-                                <option value="all">All Types</option>
-                                <option value="pdf">PDF</option>
-                                <option value="video">Video</option>
-                                <option value="presentation">Presentation</option>
-                                <option value="document">Document</option>
-                                <option value="image">Image</option>
-                            </select>
-                        </div>
-                        <div>
-                            <select
-                                value={difficultyFilter}
-                                onChange={(e) => setDifficultyFilter(e.target.value)}
-                                className="input w-full"
-                            >
-                                <option value="all">All Levels</option>
-                                <option value="beginner">Beginner</option>
-                                <option value="intermediate">Intermediate</option>
-                                <option value="advanced">Advanced</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
 
-                {/* Content Grid */}
-                {filteredContent.length === 0 ? (
-                    <div className="card p-12 text-center">
-                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">
-                            {content.length === 0 ? 'No content yet' : 'No matching content'}
-                        </h3>
-                        <p className="text-muted-foreground mb-4">
-                            {content.length === 0
-                                ? 'Upload your first learning material to get started'
-                                : 'Try adjusting your filters'}
-                        </p>
-                        {content.length === 0 && (
-                            <button
-                                onClick={() => setShowUploadModal(true)}
-                                className="btn-primary"
-                            >
-                                Upload Content
-                            </button>
+                        {filteredContent.length === 0 ? (
+                            <div className="card p-12 text-center">
+                                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                                <h3 className="text-lg font-semibold mb-2">
+                                    {content.length === 0 ? 'No content yet' : 'No matching content'}
+                                </h3>
+                                <p className="text-muted-foreground mb-4">
+                                    {content.length === 0
+                                        ? 'Upload your first learning material to get started'
+                                        : 'Try adjusting your filters'}
+                                </p>
+                                {content.length === 0 && (
+                                    <button
+                                        onClick={() => setShowUploadModal(true)}
+                                        className="btn-primary"
+                                    >
+                                        Upload Content
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {filteredContent.map((item) => (
+                                    <ContentCard
+                                        key={item._id}
+                                        content={item}
+                                        onView={handleViewContent}
+                                        onDownload={handleDownloadContent}
+                                        onDelete={handleDeleteContent}
+                                        onReprocess={handleReprocessContent}
+                                        onTogglePremium={handleTogglePremium}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* Participants Tab */}
+                {activeTab === 'participants' && (
+                    <div className="space-y-4">
+                        <div className="header-responsive mb-4">
+                            <div>
+                                <h2 className="text-xl font-bold">Course Participants</h2>
+                                <p className="text-sm text-muted-foreground">Manage student access and subscription plans</p>
+                            </div>
+                        </div>
+
+                        {participantsLoading ? (
+                            <div className="flex justify-center py-12">
+                                <Loader />
+                            </div>
+                        ) : participants.length === 0 ? (
+                            <div className="card p-12 text-center">
+                                <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                                <h3 className="text-lg font-semibold mb-2">No participants enrolled</h3>
+                                <p className="text-muted-foreground mb-4">Students from joined branches will appear here</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4">
+                                {participants.map((participant) => (
+                                    <motion.div
+                                        key={participant._id}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        className={`card p-4 hover:shadow-md transition-all border-l-4 ${
+                                            participant.subscription?.plan === 'premium' 
+                                            ? 'border-l-yellow-500 premium-card-glow shadow-yellow-500/10' 
+                                            : 'border-l-primary/20'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
+                                                    {participant.profile?.name?.charAt(0) || 'S'}
+                                                </div>
+                                                 <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className={`font-bold text-lg ${participant.subscription?.plan === 'premium' ? 'premium-gold-text' : ''}`}>
+                                                            {participant.profile?.name}
+                                                        </h3>
+                                                        {participant.subscription?.plan === 'premium' && (
+                                                            <div className="premium-badge flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-black">
+                                                                <Crown className="w-2.5 h-2.5" />
+                                                                PRO
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                                                        <span className="flex items-center gap-1">
+                                                            <Mail className="w-3 h-3" />
+                                                            {participant.email}
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            <BookOpen className="w-3 h-3" />
+                                                            {participant.branchName}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3 bg-secondary/20 p-2 rounded-2xl">
+                                                <div className="flex flex-col items-end px-2">
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Current Plan</span>
+                                                    <span className={`text-sm font-black uppercase ${participant.subscription?.plan === 'premium' ? 'text-yellow-600' : 'text-green-600'}`}>
+                                                        {participant.subscription?.plan || 'free'}
+                                                    </span>
+                                                </div>
+                                                
+                                                <button
+                                                    onClick={() => handleTogglePlan(participant)}
+                                                    className={`p-3 rounded-xl transition-all flex items-center gap-2 ${
+                                                        participant.subscription?.plan === 'premium' 
+                                                        ? 'bg-yellow-500 text-white shadow-lg shadow-yellow-500/20 hover:bg-yellow-600' 
+                                                        : 'bg-secondary text-foreground hover:bg-secondary/80'
+                                                    }`}
+                                                    title={participant.subscription?.plan === 'premium' ? 'Downgrade to Free' : 'Upgrade to Premium'}
+                                                >
+                                                    <ShieldCheck className={`w-5 h-5 ${participant.subscription?.plan === 'premium' ? 'fill-current' : ''}`} />
+                                                    <span className="text-xs font-bold uppercase">
+                                                        {participant.subscription?.plan === 'premium' ? 'Premium Member' : 'Make Premium'}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
                         )}
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredContent.map((item) => (
-                            <ContentCard
-                                key={item._id}
-                                content={item}
-                                onView={handleViewContent}
-                                onDownload={handleDownloadContent}
-                                onDelete={handleDeleteContent}
-                                onReprocess={handleReprocessContent}
-                            />
-                        ))}
+                )}
+
+                {activeTab === 'coupons' && (
+                    <div className="max-w-4xl mx-auto py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <CouponManager courseId={courseId} />
                     </div>
                 )}
             </div>

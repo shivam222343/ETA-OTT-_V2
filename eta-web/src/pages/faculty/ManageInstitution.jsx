@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Building2, GraduationCap, BookOpen, Plus,
-    Users, FileText, Settings, Trash2, Edit
+    Users, FileText, Settings, Trash2, Edit, Mail, DollarSign,
+    ShieldCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
@@ -14,6 +15,8 @@ import CreateCourseModal from '../../components/faculty/CreateCourseModal';
 import EditCourseModal from '../../components/faculty/EditCourseModal';
 import CourseCard from '../../components/faculty/CourseCard';
 import QRCodeModal from '../../components/faculty/QRCodeModal';
+import OnboardingTab from '../../components/faculty/OnboardingTab';
+import PricingTab from '../../components/faculty/PricingTab';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
 
@@ -32,6 +35,7 @@ export default function ManageInstitution() {
     const [showCreateCourse, setShowCreateCourse] = useState(false);
     const [showEditCourse, setShowEditCourse] = useState(false);
     const [showQRModal, setShowQRModal] = useState(false);
+    const [showBranchOnboarding, setShowBranchOnboarding] = useState(false);
     const [selectedBranch, setSelectedBranch] = useState(null);
     const [selectedCourse, setSelectedCourse] = useState(null);
 
@@ -96,6 +100,11 @@ export default function ManageInstitution() {
     const handleShowQR = (branch) => {
         setSelectedBranch(branch);
         setShowQRModal(true);
+    };
+
+    const handleShowBranchOnboarding = (branch) => {
+        setSelectedBranch(branch);
+        setShowBranchOnboarding(true);
     };
 
     const handleCreateCourse = (newCourse) => {
@@ -293,6 +302,42 @@ export default function ManageInstitution() {
                             />
                         )}
                     </button>
+                    <button
+                        onClick={() => setActiveTab('onboarding')}
+                        className={`pb-3 px-4 font-medium transition-colors relative ${activeTab === 'onboarding'
+                            ? 'text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        <span className="flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4" />
+                            Onboarding
+                        </span>
+                        {activeTab === 'onboarding' && (
+                            <motion.div
+                                layoutId="activeTab"
+                                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                            />
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('pricing')}
+                        className={`pb-3 px-4 font-medium transition-colors relative ${activeTab === 'pricing'
+                            ? 'text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                    >
+                        <span className="flex items-center gap-2">
+                            <DollarSign className="w-4 h-4" />
+                            Pricing
+                        </span>
+                        {activeTab === 'pricing' && (
+                            <motion.div
+                                layoutId="activeTab"
+                                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                            />
+                        )}
+                    </button>
                 </div>
 
                 {/* Branches Tab */}
@@ -332,6 +377,7 @@ export default function ManageInstitution() {
                                         onEdit={handleEditBranch}
                                         onDelete={handleDeleteBranch}
                                         onShowQR={handleShowQR}
+                                        onInvite={handleShowBranchOnboarding}
                                     />
                                 ))}
                             </div>
@@ -397,6 +443,16 @@ export default function ManageInstitution() {
                         )}
                     </div>
                 )}
+
+                {/* Onboarding Tab */}
+                {activeTab === 'onboarding' && (
+                    <OnboardingTab institutionId={institutionId} />
+                )}
+
+                {/* Pricing Tab */}
+                {activeTab === 'pricing' && (
+                    <PricingTab institutionId={institutionId} />
+                )}
             </div>
 
             {/* Modals */}
@@ -442,6 +498,50 @@ export default function ManageInstitution() {
                 onClose={() => setShowQRModal(false)}
                 branch={selectedBranch}
             />
+
+            {/* Branch Onboarding Modal */}
+            <AnimatePresence>
+                {showBranchOnboarding && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-card w-full max-w-5xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden border border-border flex flex-col"
+                        >
+                            <div className="p-6 border-b flex items-center justify-between bg-secondary/30">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                        <Mail className="w-5 h-5 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold">Branch Onboarding: {selectedBranch?.name}</h2>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            Invite students specifically to this branch
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setShowBranchOnboarding(false);
+                                        setSelectedBranch(null);
+                                    }}
+                                    className="p-2 hover:bg-secondary rounded-full transition-colors"
+                                >
+                                    <Plus className="w-5 h-5 rotate-45" />
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-8">
+                                <OnboardingTab 
+                                    institutionId={institutionId} 
+                                    branchId={selectedBranch?._id} 
+                                />
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

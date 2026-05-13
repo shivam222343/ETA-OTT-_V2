@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Upload, FileText, Video, Image, File, Loader2, CheckCircle, AlertCircle, Link as LinkIcon } from 'lucide-react';
+import { X, Upload, FileText, Video, Image, File, Loader2, CheckCircle, AlertCircle, Link as LinkIcon, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
 
@@ -47,7 +47,8 @@ export default function UploadContentModal({ isOpen, onClose, onSuccess, courseI
         description: '',
         difficulty: 'intermediate',
         category: 'Lecture',
-        tags: ''
+        tags: '',
+        isPremium: true
     });
 
     const handleDrag = (e) => {
@@ -168,6 +169,7 @@ export default function UploadContentModal({ isOpen, onClose, onSuccess, courseI
                 uploadFormData.append('description', formData.description);
                 uploadFormData.append('difficulty', formData.difficulty);
                 uploadFormData.append('category', formData.category);
+                uploadFormData.append('isPremium', formData.isPremium);
 
                 const tags = formData.tags
                     .split(',')
@@ -197,6 +199,7 @@ export default function UploadContentModal({ isOpen, onClose, onSuccess, courseI
                     description: formData.description,
                     difficulty: formData.difficulty,
                     category: formData.category,
+                    isPremium: formData.isPremium,
                     tags: formData.tags
                         .split(',')
                         .map(tag => tag.trim())
@@ -213,6 +216,7 @@ export default function UploadContentModal({ isOpen, onClose, onSuccess, courseI
                     description: formData.description,
                     difficulty: formData.difficulty,
                     category: formData.category,
+                    isPremium: formData.isPremium,
                     tags: formData.tags
                         .split(',')
                         .map(tag => tag.trim())
@@ -254,7 +258,8 @@ export default function UploadContentModal({ isOpen, onClose, onSuccess, courseI
             description: '',
             difficulty: 'intermediate',
             category: 'Lecture',
-            tags: ''
+            tags: '',
+            isPremium: true
         });
     };
 
@@ -570,6 +575,29 @@ export default function UploadContentModal({ isOpen, onClose, onSuccess, courseI
                         <p className="text-xs text-muted-foreground mt-1">
                             Separate tags with commas
                         </p>
+                    </div>
+
+                    {/* Premium Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-2xl border border-border/50">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl ${formData.isPremium ? 'bg-yellow-500/20 text-yellow-600' : 'bg-green-500/20 text-green-600'}`}>
+                                <Star className={`w-5 h-5 ${formData.isPremium ? 'fill-current' : ''}`} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold">Premium Access</p>
+                                <p className="text-[10px] text-muted-foreground">Only students with a PRO subscription can access this content.</p>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                className="sr-only peer"
+                                checked={formData.isPremium}
+                                onChange={(e) => setFormData({ ...formData, isPremium: e.target.checked })}
+                                disabled={uploading || processing}
+                            />
+                            <div className="w-11 h-6 bg-secondary/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shadow-inner"></div>
+                        </label>
                     </div>
 
                     {/* Submit Buttons */}

@@ -45,7 +45,8 @@ router.post('/signup', async (req, res) => {
                     id: user._id,
                     email: user.email,
                     role: user.role,
-                    profile: user.profile
+                    profile: user.profile,
+                    subscriptions: user.subscriptions || []
                 },
                 token
             }
@@ -94,7 +95,8 @@ router.post('/login', async (req, res) => {
                     role: user.role,
                     profile: user.profile,
                     institutionIds: user.institutionIds,
-                    branchIds: user.branchIds
+                    branchIds: user.branchIds,
+                    subscriptions: user.subscriptions || []
                 },
                 token
             }
@@ -139,6 +141,7 @@ router.post('/verify-token', async (req, res) => {
                     profile: user.profile,
                     institutionIds: user.institutionIds,
                     branchIds: user.branchIds,
+                    subscriptions: user.subscriptions || [],
                     groqApiKey: user.groqApiKey,
                     aiOnboarding: user.aiOnboarding
                 }
@@ -178,6 +181,7 @@ router.get('/profile', async (req, res) => {
                     profile: user.profile,
                     institutionIds: user.institutionIds,
                     branchIds: user.branchIds,
+                    subscriptions: user.subscriptions || [],
                     groqApiKey: user.groqApiKey,
                     aiOnboarding: user.aiOnboarding,
                     progressStats: user.progressStats
@@ -250,6 +254,7 @@ router.put('/profile', authenticate, attachUser, upload.fields([
                     profile: user.profile,
                     institutionIds: user.institutionIds,
                     branchIds: user.branchIds,
+                    subscriptions: user.subscriptions || [],
                     groqApiKey: user.groqApiKey,
                     aiOnboarding: user.aiOnboarding,
                     createdAt: user.createdAt

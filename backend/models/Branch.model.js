@@ -46,6 +46,10 @@ const branchSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
+    },
+    universalKeyEnabled: {
+        type: Boolean,
+        default: true
     }
 }, {
     timestamps: true

@@ -1,12 +1,19 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import { authenticate, attachUser } from '../middleware/auth.middleware.js';
-import { requireFaculty, requireStudent } from '../middleware/role.middleware.js';
+import { requireFaculty, requireStudent, requireFacultyOrAdmin } from '../middleware/role.middleware.js';
 import Branch from '../models/Branch.model.js';
 import Institution from '../models/Institution.model.js';
 import User from '../models/User.model.js';
+import JoinKey from '../models/JoinKey.model.js';
 import cloudinary from '../config/cloudinary.config.js';
 import { runNeo4jQuery } from '../config/neo4j.config.js';
+import { sendStudentInvitation } from '../services/mail.service.js';
+import multer from 'multer';
+import xlsx from 'xlsx';
+import fs from 'fs';
+
+const upload = multer({ dest: 'uploads/' });
 
 const router = express.Router();
 
@@ -340,6 +347,237 @@ router.get('/student/my-branches', authenticate, attachUser, requireStudent, asy
             message: 'Failed to get your branches',
             error: error.message
         });
+    }
+});
+
+// Bulk invite students to Branch via Excel
+router.post('/:id/invite-students', authenticate, attachUser, requireFaculty, upload.single('file'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`DEBUG: Starting branch invite for branch: ${id}`);
+        
+        if (!req.file) {
+            console.error('DEBUG: No file uploaded');
+            return res.status(400).json({ success: false, message: 'Excel file is required' });
+        }
+
+        const branch = await Branch.findById(id).populate('institutionId');
+        if (!branch) {
+            console.error(`DEBUG: Branch ${id} not found`);
+            return res.status(404).json({ success: false, message: 'Branch not found' });
+        }
+
+        const instId = branch.institutionId?._id || branch.institutionId;
+        const instName = branch.institutionId?.name || 'Institution';
+        console.log(`DEBUG: Branch found: ${branch.name}, Institution: ${instName} (${instId})`);
+
+        // Read Excel
+        console.log(`DEBUG: Reading file from: ${req.file.path}`);
+        const workbook = xlsx.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0];
+        const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        console.log(`DEBUG: Found ${data.length} rows in Excel`);
+
+        const invitations = [];
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            console.log(`DEBUG: Processing row ${i + 1}:`, row);
+
+            const email = row.Email || row.email || row['Student Email'] || row['student email'];
+            const name = row.Name || row.name || row['Student Name'] || row['student name'] || 'Student';
+
+            if (!email || typeof email !== 'string') {
+                console.warn(`DEBUG: Skipping row ${i + 1} - Invalid or missing email`);
+                continue;
+            }
+
+            try {
+                // Check if already invited to this branch
+                const existingKey = await JoinKey.findOne({ 
+                    branchId: branch._id, 
+                    studentEmail: email.toLowerCase() 
+                });
+
+                if (existingKey) {
+                    console.log(`DEBUG: Student ${email} already has a key for this branch. Skipping.`);
+                    invitations.push({ email, name, key: existingKey.key, status: 'existing' });
+                    continue;
+                }
+
+                const joinKey = await JoinKey.create({
+                    institutionId: instId,
+                    branchId: branch._id,
+                    studentEmail: email.toLowerCase().trim(),
+                    studentName: name.trim(),
+                    type: 'individual'
+                });
+
+                console.log(`DEBUG: Key created for ${email}: ${joinKey.key}`);
+
+                // Send Email
+                try {
+                    await sendStudentInvitation(email, name, instName, joinKey.key, branch.name);
+                } catch (emailErr) {
+                    console.error(`DEBUG: Email failed for ${email}:`, emailErr.message);
+                }
+
+                invitations.push({ email, name, key: joinKey.key, status: 'new' });
+            } catch (rowErr) {
+                console.error(`DEBUG: Error processing row ${i + 1} (${email}):`, rowErr.message);
+                // Continue to next row instead of crashing
+            }
+        }
+
+        // Cleanup file
+        if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+            console.log('DEBUG: Temporary file cleaned up');
+        }
+
+        res.json({
+            success: true,
+            message: `Successfully invited ${invitations.length} students to ${branch.name}`,
+            data: { invitations }
+        });
+    } catch (error) {
+        console.error('CRITICAL: Branch invite process failed!');
+        console.error('Error stack:', error.stack);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to process invitations',
+            error: error.message 
+        });
+    }
+});
+
+// Get Branch invitation history
+router.get('/:id/invitations', authenticate, attachUser, requireFaculty, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { page = 1, limit = 25 } = req.query;
+
+        const invitations = await JoinKey.find({ branchId: id })
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(parseInt(limit));
+
+        const total = await JoinKey.countDocuments({ branchId: id });
+
+        res.json({
+            success: true,
+            data: {
+                invitations,
+                pagination: {
+                    total,
+                    page: parseInt(page),
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to fetch invitations' });
+    }
+});
+
+// Join Branch with secret key (Student)
+router.post('/join-with-key', authenticate, attachUser, async (req, res) => {
+    try {
+        const { secretKey } = req.body;
+        if (!secretKey) return res.status(400).json({ success: false, message: 'Secret key is required' });
+
+        const normalizedKey = secretKey.trim().toUpperCase();
+
+        // 1. Check for Individual Key
+        let joinKey = await JoinKey.findOne({ key: normalizedKey, isUsed: false });
+        let branch;
+
+        if (joinKey) {
+            branch = await Branch.findById(joinKey.branchId);
+            if (!branch) return res.status(404).json({ success: false, message: 'Branch no longer exists' });
+        } else {
+            // 2. Check for Universal Key
+            branch = await Branch.findOne({ 
+                accessKey: normalizedKey,
+                universalKeyEnabled: true 
+            });
+
+            if (!branch) {
+                return res.status(400).json({ success: false, message: 'Invalid or expired secret key' });
+            }
+        }
+
+        // Check if already a student
+        if (req.dbUser.branchIds.some(id => id.toString() === branch._id.toString())) {
+            return res.status(400).json({ success: false, message: `You are already enrolled in ${branch.name}` });
+        }
+
+        // Add user to branch
+        await User.findByIdAndUpdate(req.dbUser._id, {
+            $addToSet: { 
+                branchIds: branch._id,
+                institutionIds: branch.institutionId
+            }
+        });
+
+        // Update branch stats
+        await Branch.findByIdAndUpdate(branch._id, {
+            $addToSet: { enrolledStudents: req.dbUser._id },
+            $inc: { 'stats.totalStudents': 1 }
+        });
+
+        // Mark key as used
+        if (joinKey) {
+            joinKey.isUsed = true;
+            joinKey.usedBy = req.dbUser._id;
+            await joinKey.save();
+        }
+
+        res.json({
+            success: true,
+            message: `Successfully joined ${branch.name}`,
+            data: { branch }
+        });
+    } catch (error) {
+        console.error('Branch join error:', error);
+        res.status(500).json({ success: false, message: 'Failed to join branch' });
+    }
+});
+
+// Get Branch Universal Key info
+router.get('/:id/universal-key', authenticate, attachUser, requireFaculty, async (req, res) => {
+    try {
+        const branch = await Branch.findById(req.params.id);
+        if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+
+        res.json({
+            success: true,
+            data: {
+                universalJoinKey: branch.accessKey,
+                universalKeyEnabled: branch.universalKeyEnabled
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to fetch settings' });
+    }
+});
+
+// Toggle Branch Universal Key
+router.patch('/:id/universal-key/toggle', authenticate, attachUser, requireFaculty, async (req, res) => {
+    try {
+        const { enabled } = req.body;
+        const branch = await Branch.findByIdAndUpdate(
+            req.params.id,
+            { universalKeyEnabled: enabled },
+            { new: true }
+        );
+
+        res.json({
+            success: true,
+            message: `Universal key ${enabled ? 'enabled' : 'disabled'}`,
+            data: { enabled: branch.universalKeyEnabled }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to update settings' });
     }
 });
 

@@ -6,12 +6,15 @@ import {
     ArrowLeft, Search, Filter, Play,
     ExternalLink, Download, Clock, Star, Trophy,
     ChevronRight, Lock, MessageSquare, List,
-    FileCode, FileImage, FileAudio, FileQuestion, Info
+    FileCode, FileImage, FileAudio, FileQuestion, Info, Crown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
 import Loader from '../../components/Loader';
 import ThemeToggle from '../../components/ThemeToggle';
+import { useSocket } from '../../hooks/useSocket';
+import UpgradeModal from '../../components/student/UpgradeModal';
+import { ShieldAlert } from 'lucide-react';
 
 // Lazy Loaded Components
 const ContentViewer = lazy(() => import('../../components/faculty/ContentViewer'));
@@ -29,10 +32,27 @@ export default function CourseResources() {
     const [searchQuery, setSearchQuery] = useState('');
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [infoContent, setInfoContent] = useState(null);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [userPlan, setUserPlan] = useState('free');
+    const [user, setUser] = useState(null);
+    
+    const socket = useSocket();
 
     useEffect(() => {
         fetchCourseData();
-    }, [courseId]);
+        
+        if (socket) {
+            socket.on('plan_updated', (data) => {
+                console.log('Plan updated via socket in CourseResources:', data);
+                toast.success('Your subscription has been updated! Refreshing access...');
+                fetchCourseData();
+            });
+            
+            return () => {
+                socket.off('plan_updated');
+            };
+        }
+    }, [courseId, socket, user?._id]);
 
     const fetchCourseData = async () => {
         setLoading(true);
@@ -40,9 +60,40 @@ export default function CourseResources() {
         try {
             const response = await apiClient.get(`/courses/${courseId}`);
             setCourse(response.data.data.course);
+            
             // Filter out any null/undefined items (orphaned references)
             const validContents = (response.data.data.course.contentIds || []).filter(item => item !== null && typeof item === 'object' && item._id);
             setContents(validContents);
+
+            // Refresh profile from backend to get latest plan status
+            try {
+                const profileRes = await apiClient.get('/auth/profile');
+                const updatedUser = profileRes.data.data.user;
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                setUser(updatedUser);
+                
+                if (updatedUser.subscriptions) {
+                    const sub = updatedUser.subscriptions.find(s => 
+                        s.institutionId?.toString() === response.data.data.course.institutionId?._id?.toString() || 
+                        s.institutionId?.toString() === response.data.data.course.institutionId?.toString()
+                    );
+                    setUserPlan(sub?.plan || 'free');
+                }
+            } catch (profileError) {
+                console.error('Error refreshing profile in CourseResources:', profileError);
+                // Fallback to localStorage if fetch fails
+                const userData = JSON.parse(localStorage.getItem('user'));
+                if (userData) {
+                    setUser(userData);
+                    if (userData.subscriptions) {
+                        const sub = userData.subscriptions.find(s => 
+                            s.institutionId?.toString() === response.data.data.course.institutionId?._id?.toString() || 
+                            s.institutionId?.toString() === response.data.data.course.institutionId?.toString()
+                        );
+                        setUserPlan(sub?.plan || 'free');
+                    }
+                }
+            }
         } catch (error) {
             console.error('Fetch course resources error:', error);
             setError(true);
@@ -50,6 +101,14 @@ export default function CourseResources() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleContentClick = (content) => {
+        if (content.accessRules?.isPremium && userPlan !== 'premium') {
+            setShowUpgradeModal(true);
+            return;
+        }
+        setSelectedContent(content);
     };
 
     const getIcon = (type) => {
@@ -114,7 +173,15 @@ export default function CourseResources() {
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div>
-                            <h1 className="text-xl font-bold">{course?.name}</h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className={`text-xl font-bold ${userPlan === 'premium' ? 'premium-gold-text' : ''}`}>{course?.name}</h1>
+                                {userPlan === 'premium' && (
+                                    <div className="premium-badge flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black">
+                                        <Crown className="w-2.5 h-2.5" />
+                                        PREMIUM
+                                    </div>
+                                )}
+                            </div>
                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
                                 {course?.code || 'COURSE'} • {contents.length} Total Lessons
                             </p>
@@ -202,8 +269,10 @@ export default function CourseResources() {
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: idx * 0.03 }}
-                                            onClick={() => setSelectedContent(content)}
-                                            className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-card border border-border rounded-2xl hover:border-primary/50 transition-all cursor-pointer hover:shadow-lg hover:shadow-primary/5"
+                                            onClick={() => handleContentClick(content)}
+                                            className={`group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-card border rounded-2xl transition-all cursor-pointer hover:shadow-lg hover:shadow-primary/5 ${
+                                                content.accessRules?.isPremium ? 'border-yellow-500/30 premium-card-glow' : 'border-border hover:border-primary/50'
+                                            }`}
                                         >
                                             <div className="relative w-full sm:w-32 aspect-video rounded-xl overflow-hidden bg-secondary/50 group-hover:shadow-md transition-all flex-shrink-0">
                                                 {content.file?.thumbnail?.url ? (
@@ -213,7 +282,7 @@ export default function CourseResources() {
                                                         className="w-full h-full object-cover transition-transform group-hover:scale-110"
                                                         onError={(e) => {
                                                             e.target.onerror = null;
-                                                            e.target.src = ''; // Clear broken src
+                                                            e.target.src = ''; 
                                                             e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-secondary/30"><div class="text-[8px] font-bold text-muted-foreground uppercase opacity-40">No Preview</div></div>';
                                                         }}
                                                     />
@@ -223,7 +292,6 @@ export default function CourseResources() {
                                                     </div>
                                                 )}
 
-                                                {/* Overlay Duration/Pages */}
                                                 {(content.file?.duration || content.file?.pages) && (
                                                     <div className="absolute bottom-1 right-1 bg-black/60 backdrop-blur-sm text-[8px] text-white px-1 py-0.5 rounded font-bold">
                                                         {content.type === 'video' ?
@@ -232,7 +300,6 @@ export default function CourseResources() {
                                                     </div>
                                                 )}
 
-                                                {/* Type Icon Overlay */}
                                                 <div className="absolute top-1 left-1 p-1 rounded-md bg-black/40 backdrop-blur-sm">
                                                     <Icon className="w-3 h-3 text-white" />
                                                 </div>
@@ -240,8 +307,11 @@ export default function CourseResources() {
 
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <h4 className="font-bold text-sm group-hover:text-primary transition-colors">
+                                                    <h4 className={`font-bold text-sm transition-colors flex items-center gap-2 ${content.accessRules?.isPremium ? 'premium-gold-text' : 'group-hover:text-primary'}`}>
                                                         {content.title}
+                                                        {content.accessRules?.isPremium && (
+                                                            <span className="premium-badge">Premium</span>
+                                                        )}
                                                     </h4>
                                                     {content.processingStatus !== 'completed' && (
                                                         <span className="text-[8px] bg-yellow-500/10 text-yellow-600 px-1.5 py-0.5 rounded border border-yellow-500/20 animate-pulse">
@@ -258,11 +328,10 @@ export default function CourseResources() {
                                                     </span>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2 w-full sm:w-auto mt-4 sm:mt-0">
+                                            <div className="flex items-center gap-2 w-full sm:w-auto mt-4 sm:mt-0" onClick={(e) => e.stopPropagation()}>
                                                 <a
-                                                    href={content.file.url}
+                                                    href={content.file?.url}
                                                     download={content.title}
-                                                    onClick={(e) => e.stopPropagation()}
                                                     className="p-2.5 bg-secondary hover:bg-primary/10 hover:text-primary rounded-xl transition-all"
                                                     title="Download"
                                                 >
@@ -280,11 +349,17 @@ export default function CourseResources() {
                                                     <Info className="w-4 h-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => setSelectedContent(content)}
-                                                    className="flex-1 sm:flex-none py-2 px-6 rounded-xl bg-secondary hover:bg-primary hover:text-white transition-all text-sm font-bold flex items-center justify-center gap-2"
+                                                    onClick={() => handleContentClick(content)}
+                                                    className={`flex-1 sm:flex-none py-2 px-6 rounded-xl transition-all text-sm font-bold flex items-center justify-center gap-2 ${
+                                                        content.accessRules?.isPremium && userPlan !== 'premium'
+                                                        ? 'premium-gold-bg hover:scale-105 active:scale-95 shadow-lg shadow-yellow-500/20'
+                                                        : 'bg-secondary hover:bg-primary hover:text-white'
+                                                    }`}
                                                 >
-                                                    <span className="btn-text">Start Learning</span>
-                                                    <Play className="w-3 h-3 fill-current" />
+                                                    <span className="btn-text">
+                                                        {content.accessRules?.isPremium && userPlan !== 'premium' ? 'Unlock Now' : 'Start Learning'}
+                                                    </span>
+                                                    {content.accessRules?.isPremium && userPlan !== 'premium' ? <Lock className="w-3 h-3" /> : <Play className="w-3 h-3 fill-current" />}
                                                 </button>
                                             </div>
                                         </motion.div>
@@ -295,7 +370,6 @@ export default function CourseResources() {
                     </div>
                 </main>
 
-                {/* Performance / Discussion Column */}
                 <div className="hidden xl:block w-80 border-l border-border p-6 space-y-8 bg-secondary/10 overflow-y-auto">
                     <div className="space-y-4">
                         <h4 className="text-sm font-bold flex items-center gap-2">
@@ -333,7 +407,6 @@ export default function CourseResources() {
                 </div>
             </div>
 
-            {/* Content Viewer Modal/Modal Overlays */}
             <AnimatePresence mode="wait">
                 {selectedContent && (
                     <Suspense fallback={<Loader />}>
@@ -366,6 +439,15 @@ export default function CourseResources() {
                     </Suspense>
                 )}
             </AnimatePresence>
+
+            {showUpgradeModal && (
+                <UpgradeModal 
+                    isOpen={showUpgradeModal} 
+                    onClose={() => setShowUpgradeModal(false)}
+                    institutionId={course?.institutionId?._id || course?.institutionId}
+                    user={user}
+                />
+            )}
         </div>
     );
 }
