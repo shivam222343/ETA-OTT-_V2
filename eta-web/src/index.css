@@ -37,17 +37,67 @@
     --popover-foreground: 210 40% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 215 25% 27%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 215 25% 27%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 215 25% 27%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 215 25% 27%;
+    --input: 215 25% 27%;
     --ring: 224.3 76.3% 48%;
+
+    /* Golden Theme Variables */
+    --premium-gold: 45 100% 50%;
+    --premium-gold-dark: 35 100% 35%;
+    --premium-gold-glow: rgba(255, 215, 0, 0.4);
+  }
+
+  .premium-gold-text {
+    background: linear-gradient(to right, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+  }
+
+  .premium-gold-border {
+    border-color: #d4af37 !important;
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
+  }
+
+  .premium-gold-bg {
+    background: linear-gradient(135deg, #bf953f 0%, #fcf6ba 45%, #b38728 100%);
+    color: #1a1a1a !important;
+  }
+
+  .premium-card-glow {
+    position: relative;
+  }
+
+  .premium-card-glow::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(45deg, #bf953f, #fcf6ba, #b38728, #fcf6ba, #bf953f);
+    z-index: -1;
+    border-radius: inherit;
+    opacity: 0.3;
+    animation: gold-flow 3s linear infinite;
+  }
+
+  @keyframes gold-flow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+
+  .premium-badge {
+    @apply flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter;
+    background: linear-gradient(135deg, #d4af37, #f9d976);
+    color: #000;
+    box-shadow: 0 2px 5px rgba(212, 175, 55, 0.3);
   }
 
   * {

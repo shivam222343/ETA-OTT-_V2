@@ -135,7 +135,10 @@ router.post('/', authenticate, attachUser, requireFaculty, uploadWithThumbnail, 
             uploadedBy: req.dbUser._id,
             processingStatus: 'pending',
             isPublished: true, // Show to students immediately
-            publishedAt: new Date()
+            publishedAt: new Date(),
+            accessRules: {
+                isPremium: req.body.isPremium === 'true' || req.body.isPremium === true
+            }
         });
 
         // Link content to course and increment stats
@@ -223,7 +226,10 @@ router.post('/youtube', authenticate, attachUser, requireFaculty, async (req, re
             uploadedBy: req.dbUser._id,
             processingStatus: 'pending',
             isPublished: true,
-            publishedAt: new Date()
+            publishedAt: new Date(),
+            accessRules: {
+                isPremium: req.body.isPremium === 'true' || req.body.isPremium === true
+            }
         });
 
         // Link content to course
@@ -311,7 +317,10 @@ router.post('/web', authenticate, attachUser, requireFaculty, async (req, res) =
             uploadedBy: req.dbUser._id,
             processingStatus: 'pending',
             isPublished: true,
-            publishedAt: new Date()
+            publishedAt: new Date(),
+            accessRules: {
+                isPremium: req.body.isPremium === 'true' || req.body.isPremium === true
+            }
         });
 
         // Link content to course
@@ -473,6 +482,21 @@ router.get('/:id', authenticate, attachUser, async (req, res) => {
             });
         }
 
+        // Check premium access for students
+        if (req.dbUser.role === 'student' && content.accessRules?.isPremium) {
+            const userSub = req.dbUser.subscriptions?.find(sub => 
+                sub.institutionId?.toString() === content.institutionId?.toString()
+            );
+
+            if (!userSub || userSub.plan !== 'premium') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'This is premium content. Please upgrade your plan to access it.',
+                    isPremiumLocked: true
+                });
+            }
+        }
+
         // Increment view count
         await content.incrementViews();
 
@@ -532,7 +556,7 @@ router.get('/course/:courseId', authenticate, attachUser, async (req, res) => {
 // Update content
 router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) => {
     try {
-        const { title, description, difficulty, category, tags, isPublished } = req.body;
+        const { title, description, difficulty, category, tags, isPublished, isPremium } = req.body;
 
         const content = await Content.findById(req.params.id);
         if (!content) {
@@ -561,6 +585,9 @@ router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) =>
             if (isPublished && !content.publishedAt) {
                 content.publishedAt = new Date();
             }
+        }
+        if (isPremium !== undefined) {
+            content.accessRules.isPremium = isPremium;
         }
 
         await content.save();

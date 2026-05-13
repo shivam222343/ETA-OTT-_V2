@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import {
     FileText, Video, Image, File, Download, Eye, Edit, Trash2,
-    Clock, User, Tag, BarChart3, CheckCircle, Loader2, AlertCircle, Info
+    Clock, User, Tag, BarChart3, CheckCircle, Loader2, AlertCircle, Info, Star, ShieldCheck
 } from 'lucide-react';
 import { useState } from 'react';
 import ExtractedInfoModal from './ExtractedInfoModal';
@@ -28,7 +28,7 @@ const PROCESSING_STATUS = {
     failed: { icon: AlertCircle, color: 'text-red-500', label: 'Failed' }
 };
 
-export default function ContentCard({ content, onView, onEdit, onDelete, onDownload, onReprocess }) {
+export default function ContentCard({ content, onView, onEdit, onDelete, onDownload, onReprocess, onTogglePremium }) {
     const [showExtractedInfo, setShowExtractedInfo] = useState(false);
     const FileIcon = FILE_TYPE_ICONS[content.type] || File;
     const statusInfo = PROCESSING_STATUS[content.processingStatus] || PROCESSING_STATUS.pending;
@@ -99,6 +99,12 @@ export default function ContentCard({ content, onView, onEdit, onDelete, onDownl
                             {content.file.pages} pages
                         </div>
                     )}
+
+                    {content.accessRules?.isPremium && (
+                        <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-yellow-500/90 text-black shadow-lg">
+                            <Star className="w-3 h-3 fill-current" />
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -152,6 +158,12 @@ export default function ContentCard({ content, onView, onEdit, onDelete, onDownl
                         {content.metadata.category}
                     </span>
                 )}
+
+                {/* Premium Status */}
+                <span className={`text-xs px-2 py-1 rounded-full border flex items-center gap-1 ${content.accessRules?.isPremium ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' : 'bg-green-500/10 text-green-600 border-green-500/20'}`}>
+                    <ShieldCheck className="w-3 h-3" />
+                    {content.accessRules?.isPremium ? 'Premium' : 'Free Content'}
+                </span>
 
                 {/* Processing Status */}
                 {content.processingStatus === 'completed' || content.processingStatus === 'failed' ? (
@@ -254,6 +266,15 @@ export default function ContentCard({ content, onView, onEdit, onDelete, onDownl
                         className="btn-secondary text-sm py-2 px-3 flex items-center justify-center"
                     >
                         <Edit className="w-4 h-4" />
+                    </button>
+                )}
+                {onTogglePremium && (
+                    <button
+                        onClick={() => onTogglePremium(content)}
+                        className={`btn-secondary text-sm py-2 px-3 flex items-center justify-center transition-all ${content.accessRules?.isPremium ? 'text-yellow-600 hover:bg-yellow-500/10' : 'text-green-600 hover:bg-green-500/10'}`}
+                        title={content.accessRules?.isPremium ? 'Make Free' : 'Make Premium'}
+                    >
+                        <ShieldCheck className={`w-4 h-4 ${content.accessRules?.isPremium ? 'fill-current' : ''}`} />
                     </button>
                 )}
                 <button

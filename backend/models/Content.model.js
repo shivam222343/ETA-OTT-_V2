@@ -113,6 +113,10 @@ const contentSchema = new mongoose.Schema({
             type: Boolean,
             default: false
         },
+        isPremium: {
+            type: Boolean,
+            default: true // Most content is premium by default
+        },
         allowedRoles: [{
             type: String,
             enum: ['student', 'faculty', 'admin']

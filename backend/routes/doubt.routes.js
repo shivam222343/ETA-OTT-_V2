@@ -31,9 +31,34 @@ router.post('/ask', authenticate, attachUser, async (req, res) => {
 
         // Fetch content details early to get extracted data
         const contentDoc = await Content.findById(contentId).populate('courseId');
+        if (!contentDoc) return res.status(404).json({ success: false, message: 'Content not found' });
+
+        // 0. Check AI Credits / Subscription (New Tiered Logic)
+        const subscription = req.dbUser.subscriptions?.find(sub => 
+            sub.institutionId?.toString() === contentDoc.institutionId?.toString()
+        );
+        
+        // If free tier and out of credits, block with paywall error
+        if (subscription && subscription.plan === 'free' && subscription.aiCredits <= 0) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'AI limit reached! Please upgrade to Premium for unlimited doubts.',
+                errorCode: 'PREMIUM_REQUIRED'
+            });
+        }
+
         const contentUrl = contentDoc?.file?.url;
         const contentType = contentDoc?.type || 'video';
         const fullTranscript = contentDoc?.extractedData?.text || '';
+
+        // Decrement credits for free users immediately (Atomic Update)
+        if (subscription && subscription.plan === 'free') {
+            await User.updateOne(
+                { _id: studentId, 'subscriptions.institutionId': contentDoc.institutionId },
+                { $inc: { 'subscriptions.$.aiCredits': -1 } }
+            );
+            console.log(`DEBUG: AI Credit consumed for ${req.dbUser.email}. Remaining: ${subscription.aiCredits - 1}`);
+        }
 
         // Rule 3: Construct structured context object
         let groundingContext = {

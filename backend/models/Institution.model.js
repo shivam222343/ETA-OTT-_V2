@@ -61,6 +61,27 @@ const institutionSchema = new mongoose.Schema({
         type: String,
         enum: ['pending', 'approved', 'rejected'],
         default: 'approved'
+    },
+    universalJoinKey: {
+        type: String,
+        unique: true,
+        sparse: true,
+        default: () => `UNI-${nanoid(8).toUpperCase()}`
+    },
+    universalKeyEnabled: {
+        type: Boolean,
+        default: true
+    },
+    pricing: {
+        type: {
+            type: String,
+            enum: ['one-time', 'monthly'],
+            default: 'one-time'
+        },
+        amount: {
+            type: Number,
+            default: 4999 // In paise (₹49.99)
+        }
     }
 }, {
     timestamps: true

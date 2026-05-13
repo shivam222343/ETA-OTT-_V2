@@ -1,9 +1,10 @@
-import { GraduationCap, Users, QrCode, Edit, Trash2, Key, Calendar } from 'lucide-react';
+import { GraduationCap, Users, QrCode, Edit, Trash2, Key, Calendar, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 
-export default function BranchCard({ branch, onEdit, onDelete, onShowQR }) {
+export default function BranchCard(props) {
+    const { branch, onEdit, onDelete, onShowQR, onInvite } = props;
     const [showAccessKey, setShowAccessKey] = useState(false);
 
     const copyAccessKey = () => {
@@ -36,6 +37,13 @@ export default function BranchCard({ branch, onEdit, onDelete, onShowQR }) {
                         title="Show QR Code"
                     >
                         <QrCode className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => onInvite(branch)}
+                        className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                        title="Bulk Invite Students"
+                    >
+                        <Mail className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => onEdit(branch)}

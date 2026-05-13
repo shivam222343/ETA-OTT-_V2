@@ -22,7 +22,8 @@ import {
     Key,
     Video,
     Trash2,
-    User
+    User,
+    Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
