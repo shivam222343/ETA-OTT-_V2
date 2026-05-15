@@ -12,14 +12,16 @@ router.post('/validate', authenticate, async (req, res) => {
     try {
         const { code, courseId } = req.body;
 
-        if (!code || !courseId) {
-            return res.status(400).json({ success: false, message: 'Code and Course ID are required' });
+        if (!code) {
+            return res.status(400).json({ success: false, message: 'Coupon code is required' });
         }
 
-        const coupon = await Coupon.findOne({ 
-            code: code.toUpperCase(), 
-            courseId 
-        });
+        const query = { code: code.toUpperCase() };
+        if (courseId) {
+            query.courseId = courseId;
+        }
+
+        const coupon = await Coupon.findOne(query);
 
         if (!coupon) {
             return res.status(404).json({ success: false, message: 'Invalid coupon code' });

@@ -23,7 +23,8 @@ import {
     Video,
     Trash2,
     User,
-    Tag
+    Tag,
+    Sparkles
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '../../api/axios.config';
@@ -38,6 +39,7 @@ const InstitutionCard = lazy(() => import('../../components/faculty/InstitutionC
 const FacultyDoubtManager = lazy(() => import('../../components/faculty/FacultyDoubtManager'));
 const ProfileSection = lazy(() => import('../../components/ProfileSection'));
 const FacultyAnalytics = lazy(() => import('../../components/faculty/FacultyAnalytics'));
+const PeerLearningManagement = lazy(() => import('./PeerLearningManagement'));
 
 export default function FacultyDashboard() {
     const { user, logout } = useAuth();
@@ -61,6 +63,7 @@ export default function FacultyDashboard() {
         { id: 'content', label: 'Content', icon: Upload },
         { id: 'doubts', label: 'Doubts', icon: MessageSquare },
         { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+        { id: 'peer-learning', label: 'Peer Hub', icon: Sparkles },
         { id: 'profile', label: 'Profile', icon: User },
     ];
 
@@ -73,6 +76,10 @@ export default function FacultyDashboard() {
 
     // Fetch dashboard data
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        if (tab) setActiveTab(tab);
+
         fetchDashboardData();
         const handleResize = () => {
             const mobile = window.innerWidth < 1024;
@@ -636,6 +643,14 @@ export default function FacultyDashboard() {
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <Suspense fallback={<Loader />}>
                                 <ProfileSection />
+                            </Suspense>
+                        </div>
+                    )}
+
+                    {activeTab === 'peer-learning' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <Suspense fallback={<Loader />}>
+                                <PeerLearningManagement user={user} />
                             </Suspense>
                         </div>
                     )}
