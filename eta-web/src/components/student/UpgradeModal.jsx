@@ -75,6 +75,27 @@ export default function UpgradeModal({ isOpen, onClose, institutionId, courseId,
             });
 
             if (response.data.success) {
+                if (response.data.isFree) {
+                    // Handle Free Upgrade
+                    try {
+                        const claimRes = await apiClient.post('/payments/claim-free-membership', {
+                            institutionId: institution?._id || institutionId,
+                            courseId,
+                            couponCode: appliedCoupon?.code
+                        });
+                        
+                        if (claimRes.data.success) {
+                            toast.success('Premium activated successfully!');
+                            onClose();
+                            window.location.reload();
+                        }
+                    } catch (claimError) {
+                        console.error('Free claim error:', claimError);
+                        toast.error(claimError.response?.data?.message || 'Failed to claim free membership');
+                    }
+                    return;
+                }
+
                 const { orderId, amount, currency, key } = response.data.data;
 
                 const options = {

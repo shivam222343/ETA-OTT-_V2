@@ -113,7 +113,7 @@ export default function ManageCourseContent() {
     const fetchParticipants = async () => {
         setParticipantsLoading(true);
         try {
-            const response = await apiClient.get(`/courses/${courseId}/participants`);
+            const response = await apiClient.get(`/courses/${courseId}/get-participants`);
             setParticipants(response.data.data.participants || []);
         } catch (error) {
             console.error('Fetch participants error:', error);

@@ -445,6 +445,7 @@ export default function CourseResources() {
                     isOpen={showUpgradeModal} 
                     onClose={() => setShowUpgradeModal(false)}
                     institutionId={course?.institutionId?._id || course?.institutionId}
+                    courseId={courseId}
                     user={user}
                 />
             )}

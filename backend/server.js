@@ -29,6 +29,8 @@ import youtubeRoutes from './routes/youtube.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import couponRoutes from './routes/coupon.routes.js';
+import quizRoutes from './routes/quiz.routes.js';
+import peerRoutes from './routes/peer.routes.js';
 
 // Import WebSocket service
 import { initializeWebSocket } from './services/websocket.service.js';
@@ -156,6 +158,8 @@ app.use('/api/youtube', youtubeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/coupons', couponRoutes);
+app.use('/api/quizzes', quizRoutes);
+app.use('/api/peer', peerRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

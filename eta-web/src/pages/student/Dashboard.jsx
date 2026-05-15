@@ -27,6 +27,8 @@ const ContentViewer = lazy(() => import('../../components/faculty/ContentViewer'
 const ExtractedInfoModal = lazy(() => import('../../components/faculty/ExtractedInfoModal'));
 const YouTubeFeed = lazy(() => import('../../components/student/YouTubeFeed'));
 const LearningProgress = lazy(() => import('../../components/student/LearningProgress'));
+const PerformanceDashboard = lazy(() => import('../../components/student/PerformanceDashboard'));
+const PeerLearningHub = lazy(() => import('./PeerLearningHub'));
 import UpgradeModal from '../../components/student/UpgradeModal';
 export default function StudentDashboard() {
     const navigate = useNavigate();
@@ -59,6 +61,10 @@ export default function StudentDashboard() {
     const socket = useSocket();
 
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        if (tab) setActiveTab(tab);
+        
         fetchStudentData();
         
         if (socket) {
@@ -233,8 +239,11 @@ export default function StudentDashboard() {
         { id: 'courses', icon: BookOpen, label: 'My Courses' },
         { id: 'content', icon: FileText, label: 'Recent Uploads' },
         { id: 'doubts', icon: MessageSquare, label: 'My Doubts' },
-        { id: 'analytics', icon: Trophy, label: 'Learning Progress' },
-        { id: 'profile', icon: User, label: 'My Profile' },
+        { id: 'quizzes', icon: Trophy, label: 'Quiz Performance' },
+        { id: 'analytics', label: 'Analytics', icon: Layers },
+        { id: 'peer-learning', label: 'Peer Hub', icon: Users },
+        { id: 'premium', label: 'Premium', icon: Crown },
+        { id: 'profile', label: 'Profile', icon: User },
     ];
 
     const stats = [
@@ -740,7 +749,6 @@ export default function StudentDashboard() {
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                        >
                                                             <div className="p-4 flex flex-col items-center justify-center aspect-[4/3] bg-secondary/10 border-b border-border/30 rounded-t-xl overflow-hidden">
                                                                 <div className="w-16 h-16 rounded-xl bg-orange-500/5 border border-orange-500/10 flex items-center justify-center mb-3">
                                                                     <FileText className="w-8 h-8 text-orange-500/40" />
@@ -854,11 +862,29 @@ export default function StudentDashboard() {
                             </Suspense>
                         )}
 
-                        {activeTab === 'analytics' && (
+                        {activeTab === 'quizzes' && (
                             <div className="space-y-6">
                                 <div className="header-dashboard">
                                     <h3 className="text-xl font-black tracking-tighter flex items-center gap-2">
                                         <Trophy className="w-6 h-6 text-primary" />
+                                        Quiz & Performance Insights
+                                    </h3>
+                                    <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] bg-secondary/50 px-4 py-2 rounded-xl border border-border/50">
+                                        <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                                        AI Powered Analysis
+                                    </div>
+                                </div>
+                                <Suspense fallback={<Loader fullScreen={false} />}>
+                                    <PerformanceDashboard user={user} />
+                                </Suspense>
+                            </div>
+                        )}
+
+                        {activeTab === 'analytics' && (
+                            <div className="space-y-6">
+                                <div className="header-dashboard">
+                                    <h3 className="text-xl font-black tracking-tighter flex items-center gap-2">
+                                        <Layers className="w-6 h-6 text-primary" />
                                         Advanced Learning Analysis
                                     </h3>
                                     <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] bg-secondary/50 px-4 py-2 rounded-xl border border-border/50">
@@ -870,6 +896,12 @@ export default function StudentDashboard() {
                                     <LearningProgress user={user} />
                                 </Suspense>
                             </div>
+                        )}
+
+                        {activeTab === 'peer-learning' && (
+                            <Suspense fallback={<Loader fullScreen={false} />}>
+                                <PeerLearningHub />
+                            </Suspense>
                         )}
 
                         {activeTab === 'premium' && (

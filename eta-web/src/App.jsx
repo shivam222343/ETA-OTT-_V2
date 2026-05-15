@@ -19,6 +19,8 @@ const BranchResources = lazy(() => import('./pages/student/BranchResources'));
 const CourseResources = lazy(() => import('./pages/student/CourseResources'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
 const AdminSignupPage = lazy(() => import('./pages/AdminSignupPage'));
+const PeerLearningHub = lazy(() => import('./pages/student/PeerLearningHub'));
+const PeerLearningManagement = lazy(() => import('./pages/faculty/PeerLearningManagement'));
 
 // Protected Route Component
 function ProtectedRoute({ children, allowedRoles }) {
@@ -116,6 +118,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/student/peer-learning"
+        element={<Navigate to="/student/dashboard?tab=peer-learning" replace />}
+      />
 
       {/* Faculty Routes */}
       <Route
@@ -149,6 +155,10 @@ function AppRoutes() {
             <div>Faculty Institutions Page</div>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/faculty/peer-learning"
+        element={<Navigate to="/faculty/dashboard?tab=peer-learning" replace />}
       />
 
       {/* Catch all */}
