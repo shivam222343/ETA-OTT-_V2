@@ -108,6 +108,8 @@ def extract_youtube(video_url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             print(f"📥 Downloading YouTube metadata/audio for job {job_id}...")
             info = ydl.extract_info(video_url, download=True)
+            if info is None:
+                raise Exception("YouTube extraction completely failed. The cookies might be invalid/expired, or YouTube is strictly blocking the server IP.")
             video_id = info['id']
             audio_path = os.path.join(job_dir, f"{video_id}.mp3")
             
