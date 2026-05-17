@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticate, attachUser } from '../middleware/auth.middleware.js';
-import { requireFaculty } from '../middleware/role.middleware.js';
+import { requireFaculty, requireFacultyOrAdmin } from '../middleware/role.middleware.js';
 import Course from '../models/Course.model.js';
 import Branch from '../models/Branch.model.js';
 import Institution from '../models/Institution.model.js';
@@ -158,6 +158,59 @@ router.post('/', authenticate, attachUser, requireFaculty, async (req, res) => {
     }
 });
 
+// Get course participants (Students from all linked branches)
+router.get('/:id/get-participants', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id);
+        if (!course) {
+            return res.status(404).json({
+                success: false,
+                message: 'Course not found'
+            });
+        }
+
+        // Get students from all branches associated with the course
+        const branches = await Branch.find({ _id: { $in: course.branchIds } })
+            .populate('enrolledStudents', 'profile email subscriptions');
+
+        // Map and unique students
+        const studentMap = new Map();
+        branches.forEach(branch => {
+            if (branch.enrolledStudents && Array.isArray(branch.enrolledStudents)) {
+                branch.enrolledStudents.forEach(student => {
+                    const studentId = student._id.toString();
+                    
+                    // If student already added from another branch, just aggregate
+                    if (!studentMap.has(studentId)) {
+                        studentMap.set(studentId, {
+                            _id: student._id,
+                            profile: student.profile,
+                            email: student.email,
+                            branchName: branch.name,
+                            branchId: branch._id,
+                            subscription: student.subscriptions?.find(s => 
+                                s.institutionId?.toString() === course.institutionId?.toString()
+                            )
+                        });
+                    }
+                });
+            }
+        });
+
+        res.json({
+            success: true,
+            data: { participants: Array.from(studentMap.values()) }
+        });
+    } catch (error) {
+        console.error('Get course participants error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get course participants',
+            error: error.message
+        });
+    }
+});
+
 // Get course by ID
 router.get('/:id', authenticate, attachUser, async (req, res) => {
     try {
@@ -188,7 +241,9 @@ router.get('/:id', authenticate, attachUser, async (req, res) => {
 });
 
 // Update course
-router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.get('/:id/participants', (req, res) => res.redirect(`/api/courses/${req.params.id}/get-participants`));
+
+router.put('/:id', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const { name, description, code, branchIds, metadata, accessRules } = req.body;
 
@@ -296,7 +351,7 @@ router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) =>
 });
 
 // Delete course
-router.delete('/:id', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.delete('/:id', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const course = await Course.findById(req.params.id);
         if (!course) {
@@ -427,62 +482,9 @@ router.get('/institution/:institutionId', authenticate, attachUser, async (req, 
     }
 });
 
-// Get course participants (Students from all linked branches)
-router.get('/:id/participants', authenticate, attachUser, requireFaculty, async (req, res) => {
-    try {
-        const course = await Course.findById(req.params.id);
-        if (!course) {
-            return res.status(404).json({
-                success: false,
-                message: 'Course not found'
-            });
-        }
-
-        // Get students from all branches associated with the course
-        const branches = await Branch.find({ _id: { $in: course.branchIds } })
-            .populate('enrolledStudents', 'profile email subscriptions');
-
-        // Map and unique students
-        const studentMap = new Map();
-        branches.forEach(branch => {
-            if (branch.enrolledStudents && Array.isArray(branch.enrolledStudents)) {
-                branch.enrolledStudents.forEach(student => {
-                    const studentId = student._id.toString();
-                    
-                    // If student already added from another branch, just append branch info if needed
-                    // For now, we take the first branch occurrence or aggregate
-                    if (!studentMap.has(studentId)) {
-                        studentMap.set(studentId, {
-                            _id: student._id,
-                            profile: student.profile,
-                            email: student.email,
-                            branchName: branch.name,
-                            branchId: branch._id,
-                            subscription: student.subscriptions?.find(s => 
-                                s.institutionId?.toString() === course.institutionId?.toString()
-                            )
-                        });
-                    }
-                });
-            }
-        });
-
-        res.json({
-            success: true,
-            data: { participants: Array.from(studentMap.values()) }
-        });
-    } catch (error) {
-        console.error('Get course participants error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get course participants',
-            error: error.message
-        });
-    }
-});
 
 // Update course pricing (Faculty only)
-router.patch('/:id/pricing', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.patch('/:id/pricing', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const { type, amount, isPremium } = req.body;
         const courseId = req.params.id;

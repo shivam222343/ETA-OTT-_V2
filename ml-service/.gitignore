@@ -1,4 +1,3 @@
-youtube_cookies.txt
-__pycache__/
+
 *.pyc
 venv/

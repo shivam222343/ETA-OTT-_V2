@@ -81,11 +81,20 @@ router.post('/create-order', authenticate, attachUser, async (req, res) => {
 
         console.log('DEBUG: Creating Razorpay order with options:', options);
 
+        if (pricingAmount <= 0) {
+            return res.json({
+                success: true,
+                isFree: true,
+                message: '100% discount applied. Proceeding with free upgrade.'
+            });
+        }
+
         const order = await razorpay.orders.create(options);
         console.log('DEBUG: Razorpay order created:', order.id);
 
         res.json({
             success: true,
+            isFree: false,
             data: {
                 orderId: order.id,
                 amount: order.amount,
@@ -100,6 +109,81 @@ router.post('/create-order', authenticate, attachUser, async (req, res) => {
             message: 'Failed to create payment order',
             error: error.message 
         });
+    }
+});
+
+/**
+ * Claim Free Membership (100% Discount Coupons)
+ */
+router.post('/claim-free-membership', authenticate, attachUser, async (req, res) => {
+    try {
+        const { institutionId, courseId, couponCode } = req.body;
+
+        if (!couponCode) {
+            return res.status(400).json({ success: false, message: 'Coupon code required' });
+        }
+
+        // 1. Validate Coupon
+        const couponQuery = { 
+            code: couponCode.toUpperCase(), 
+            isActive: true 
+        };
+        if (courseId) couponQuery.courseId = courseId;
+        else couponQuery.institutionId = institutionId;
+
+        const coupon = await Coupon.findOne(couponQuery);
+        if (!coupon || !coupon.isValid()) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired coupon' });
+        }
+
+        // 2. Verify 100% Discount
+        // (Optional: You could also allow smaller discounts but this route is specifically for zero-payment cases)
+        const institution = await Institution.findById(institutionId || coupon.institutionId);
+        let pricingAmount = institution?.pricing?.amount || 4999;
+        
+        let finalAmount = pricingAmount;
+        if (coupon.discountType === 'percentage') {
+            finalAmount = pricingAmount * (1 - coupon.discountValue / 100);
+        } else if (coupon.discountType === 'fixed') {
+            finalAmount = Math.max(0, pricingAmount - coupon.discountValue);
+        }
+
+        if (finalAmount > 0) {
+            return res.status(400).json({ success: false, message: 'This coupon does not cover the full amount' });
+        }
+
+        // 3. Activate Premium
+        const user = await User.findById(req.dbUser._id);
+        const instId = (institutionId || coupon.institutionId).toString();
+
+        const subIndex = user.subscriptions.findIndex(sub => 
+            sub.institutionId?.toString() === instId
+        );
+
+        if (subIndex > -1) {
+            user.subscriptions[subIndex].plan = 'premium';
+            user.subscriptions[subIndex].aiCredits = 99999;
+        } else {
+            user.subscriptions.push({
+                institutionId: instId,
+                plan: 'premium',
+                aiCredits: 99999
+            });
+        }
+
+        await user.save();
+
+        // 4. Increment usage
+        coupon.currentUses += 1;
+        await coupon.save();
+
+        res.json({
+            success: true,
+            message: 'Account upgraded to PREMIUM via coupon!',
+        });
+    } catch (error) {
+        console.error('Claim free membership error:', error);
+        res.status(500).json({ success: false, message: 'Failed to process free upgrade' });
     }
 });
 

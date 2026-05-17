@@ -2,7 +2,7 @@ import express from 'express';
 import axios from 'axios';
 import cloudinary from '../config/cloudinary.config.js';
 import { authenticate, attachUser } from '../middleware/auth.middleware.js';
-import { requireFaculty } from '../middleware/role.middleware.js';
+import { requireFaculty, requireFacultyOrAdmin } from '../middleware/role.middleware.js';
 import { uploadWithThumbnail, validateFileSize, getContentType } from '../services/upload.service.js';
 import Content from '../models/Content.model.js';
 import Course from '../models/Course.model.js';
@@ -69,7 +69,7 @@ router.get('/recent', authenticate, attachUser, async (req, res) => {
 });
 
 // Upload and create content
-router.post('/', authenticate, attachUser, requireFaculty, uploadWithThumbnail, validateFileSize, async (req, res) => {
+router.post('/', authenticate, attachUser, requireFacultyOrAdmin, uploadWithThumbnail, validateFileSize, async (req, res) => {
     try {
         const file = req.files?.file?.[0] || req.file;
         const thumbnail = req.files?.thumbnail?.[0];
@@ -181,7 +181,7 @@ router.post('/', authenticate, attachUser, requireFaculty, uploadWithThumbnail, 
 });
 
 // Add YouTube Video
-router.post('/youtube', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.post('/youtube', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const { courseId, title, url, description, difficulty, category, tags } = req.body;
 
@@ -272,7 +272,7 @@ router.post('/youtube', authenticate, attachUser, requireFaculty, async (req, re
 });
 
 // Add Web Link Content
-router.post('/web', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.post('/web', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const { courseId, title, url, description, difficulty, category, tags } = req.body;
 
@@ -554,7 +554,7 @@ router.get('/course/:courseId', authenticate, attachUser, async (req, res) => {
 });
 
 // Update content
-router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.put('/:id', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const { title, description, difficulty, category, tags, isPublished, isPremium } = req.body;
 
@@ -566,8 +566,13 @@ router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) =>
             });
         }
 
-        // Verify authorization
-        if (content.uploadedBy.toString() !== req.dbUser._id.toString()) {
+        // Verify authorization (Either uploader or faculty of the course or admin)
+        const targetCourse = await Course.findById(content.courseId);
+        const isUploader = content.uploadedBy.toString() === req.dbUser._id.toString();
+        const isCourseFaculty = targetCourse && targetCourse.facultyIds.map(id => id.toString()).includes(req.dbUser._id.toString());
+        const isAdmin = req.dbUser.role === 'admin';
+
+        if (!isUploader && !isCourseFaculty && !isAdmin) {
             return res.status(403).json({
                 success: false,
                 message: 'You are not authorized to update this content'
@@ -608,7 +613,7 @@ router.put('/:id', authenticate, attachUser, requireFaculty, async (req, res) =>
 });
 
 // Delete content
-router.delete('/:id', authenticate, attachUser, requireFaculty, async (req, res) => {
+router.delete('/:id', authenticate, attachUser, requireFacultyOrAdmin, async (req, res) => {
     try {
         const content = await Content.findById(req.params.id);
         if (!content) {
