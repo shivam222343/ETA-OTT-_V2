@@ -104,6 +104,7 @@ def extract_youtube(video_url):
 
     audio_path = None
     try:
+        #a change here --------------------------->
         # 1. Extract metadata and download audio
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             print(f"📥 Downloading YouTube metadata/audio for job {job_id}...")
