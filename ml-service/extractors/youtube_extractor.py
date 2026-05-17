@@ -45,11 +45,12 @@ def extract_youtube(video_url):
     setup_ffmpeg()
     
     # 1. Handle Cookies (Securely)
-    # Priority: Env Var (Secret) > Local File
+    # Priority: Env Var (Secret) > Render Secret File > Local File
     cookies_path = None
     temp_cookie_file = os.path.join(job_dir, "cookies.txt")
     
     env_cookies = os.getenv('YOUTUBE_COOKIES_CONTENT')
+    render_secret_file = "/etc/secrets/youtube_cookies.txt"
     local_cookie_file = os.path.abspath("youtube_cookies.txt")
     
     if env_cookies:
@@ -57,6 +58,8 @@ def extract_youtube(video_url):
         with open(temp_cookie_file, "w") as f:
             f.write(env_cookies)
         cookies_path = temp_cookie_file
+    elif os.path.exists(render_secret_file):
+        cookies_path = render_secret_file
     elif os.path.exists(local_cookie_file):
         cookies_path = local_cookie_file
 
