@@ -104,6 +104,7 @@ def extract_youtube(video_url):
 
     audio_path = None
     try:
+        #what if the user is not logged in
         #a change here --------------------------->
         # 1. Extract metadata and download audio
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
