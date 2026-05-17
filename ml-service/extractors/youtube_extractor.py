@@ -59,7 +59,11 @@ def extract_youtube(video_url):
             f.write(env_cookies)
         cookies_path = temp_cookie_file
     elif os.path.exists(render_secret_file):
-        cookies_path = render_secret_file
+        #new change --------------------------->
+        # Render secrets are read-only, yt-dlp needs a writable file to update cookies
+        import shutil
+        shutil.copy2(render_secret_file, temp_cookie_file)
+        cookies_path = temp_cookie_file
     elif os.path.exists(local_cookie_file):
         cookies_path = local_cookie_file
 
