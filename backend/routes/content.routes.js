@@ -797,9 +797,7 @@ router.post('/:id/reprocess', authenticate, attachUser, async (req, res) => {
 
         // Authorization: Faculty of the course OR student who has access to the content
         const isFaculty = req.dbUser.role === 'faculty' && content.uploadedBy.toString() === req.dbUser._id.toString();
-        const isStudentWithAccess = req.dbUser.role === 'student' && content.branchIds.some(bid => 
-            req.dbUser.branchIds.some(ubid => ubid.toString() === bid.toString())
-        );
+        const isStudentWithAccess = req.dbUser.role === 'student' && content.branchIds.some(bid => req.dbUser.branchIds.includes(bid));
 
         if (!isFaculty && !isStudentWithAccess) {
             return res.status(403).json({

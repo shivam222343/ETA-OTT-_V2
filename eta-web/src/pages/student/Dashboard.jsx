@@ -216,8 +216,8 @@ export default function StudentDashboard() {
         
         const isPremiumUser = sub?.plan === 'premium';
         
-        // Treat as premium if accessRules.isPremium is explicitly true
-        const isPremiumContent = content.accessRules?.isPremium === true;
+        // Treat as premium if accessRules.isPremium is NOT explicitly false
+        const isPremiumContent = content.accessRules?.isPremium !== false;
 
         if (isPremiumContent && !isPremiumUser) {
             setUpgradeInstitutionId(contentInstId);
@@ -1047,7 +1047,7 @@ export default function StudentDashboard() {
 
                 <AnimatePresence>
                     {selectedContent && (
-                        <Suspense key="content-viewer-suspense" fallback={<Loader />}>
+                        <Suspense fallback={<Loader />}>
                             <div className="fixed inset-0 z-[100] bg-background">
                                 <ContentViewer
                                     isOpen={!!selectedContent}
@@ -1057,7 +1057,7 @@ export default function StudentDashboard() {
                             </div>
                         </Suspense>
                     )}
-                    <Suspense key="extracted-info-suspense" fallback={null}>
+                    <Suspense fallback={null}>
                         <ExtractedInfoModal
                             isOpen={showInfoModal}
                             onClose={() => {
