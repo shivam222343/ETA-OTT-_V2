@@ -45,7 +45,7 @@ def extract_youtube(video_url):
     setup_ffmpeg()
     
     # 1. Handle Cookies (Securely)
-    # Priority: Env Var (Secret) > Render Secret File > Local File (cwd) > Local File (script dir)
+    # Priority: Env Var (Secret) > Render Secret File > Local File
     cookies_path = None
     temp_cookie_file = os.path.join(job_dir, "cookies.txt")
     
@@ -53,28 +53,23 @@ def extract_youtube(video_url):
     render_secret_file = "/etc/secrets/youtube_cookies.txt"
     local_cookie_file = os.path.abspath("youtube_cookies.txt")
     
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    local_cookie_file2 = os.path.abspath(os.path.join(script_dir, "..", "youtube_cookies.txt"))
-    
-    if env_cookies and len(env_cookies.strip()) > 0:
+    if env_cookies:
         # If cookies are in env, write them to a temp file for this job
+        # Handle cases where literal \\n is pasted in env var
+        if "\\n" in env_cookies:
+            env_cookies = env_cookies.replace("\\n", "\n")
         with open(temp_cookie_file, "w") as f:
             f.write(env_cookies)
         cookies_path = temp_cookie_file
-    elif os.path.exists(render_secret_file) and os.path.getsize(render_secret_file) > 0:
+    elif os.path.exists(render_secret_file):
         # Render secrets are read-only, yt-dlp needs a writable file to update cookies
-        import shutil
-        shutil.copy2(render_secret_file, temp_cookie_file)
+        # Use open/read/write to avoid copying read-only permissions
+        with open(render_secret_file, 'r') as f_in:
+            with open(temp_cookie_file, 'w') as f_out:
+                f_out.write(f_in.read())
         cookies_path = temp_cookie_file
-    elif os.path.exists(local_cookie_file) and os.path.getsize(local_cookie_file) > 0:
+    elif os.path.exists(local_cookie_file):
         cookies_path = local_cookie_file
-    elif os.path.exists(local_cookie_file2) and os.path.getsize(local_cookie_file2) > 0:
-        cookies_path = local_cookie_file2
-
-    # Double-check that cookies file is not 0 bytes
-    if cookies_path and (not os.path.exists(cookies_path) or os.path.getsize(cookies_path) == 0):
-        print("⚠️ Selected cookies file is empty or missing, bypassing cookie loading to prevent yt-dlp crash.")
-        cookies_path = None
 
     # yt-dlp options - output to specific job directory
     ydl_opts = {
@@ -93,21 +88,7 @@ def extract_youtube(video_url):
         'writeautomaticsub': True,
         'subtitleslangs': ['en.*'],
         'skip_download': False,
-        'ignoreerrors': True,  # CRITICAL: Don't crash if subtitles are blocked (Error 429)
-        # Updated to bypass aggressive bot detection without disabling webpage/configs session handshake
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web', 'mweb', 'ios', 'android'],
-                'skip': ['dash', 'hls']
-            }
-        },
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', # Updated UA
-        'referer': 'https://www.google.com/', # Better referer
-        'http_headers': {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=1.0',
-            'Sec-Fetch-Mode': 'navigate',
-        }
+        'ignoreerrors': False,  # Let it throw actual errors so we can catch and diagnose them
     }
 
     audio_path = None
