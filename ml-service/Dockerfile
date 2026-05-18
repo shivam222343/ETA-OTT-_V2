@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     wget \
     curl \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Security: run as non-root
