@@ -192,6 +192,17 @@ async function startServer() {
     }
 }
 
+// Global exception and rejection handlers to prevent server crashes on database/Redis socket disconnects
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 Unhandled Promise Rejection at:', promise, 'reason:', reason);
+    // Do NOT exit the process, let Express continue serving requests
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('🚨 Uncaught Exception thrown:', error);
+    // Keep server running unless it is a fatal system error
+});
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully...');

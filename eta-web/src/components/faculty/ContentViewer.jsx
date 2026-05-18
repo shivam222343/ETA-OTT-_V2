@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Download, Share2, Maximize2, Minimize2,
     FileText, Video, Info, BarChart3, List, MessageCircle,
-    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock, Brain, Code
+    ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, Pencil, Play, ExternalLink, Globe, Clock, Brain, Code, Crown
 } from 'lucide-react';
 import ReactPlayer from 'react-player';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -14,6 +14,7 @@ const AITutor = lazy(() => import('../AITutor'));
 const QuizConfigModal = lazy(() => import('../student/QuizConfigModal'));
 const QuizPlayer = lazy(() => import('../student/QuizPlayer'));
 const QuizResults = lazy(() => import('../student/QuizResults'));
+const UpgradeModal = lazy(() => import('../student/UpgradeModal'));
 import Loader from '../Loader';
 import ThemeToggle from '../ThemeToggle';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
@@ -52,16 +53,38 @@ export default function ContentViewer({ isOpen, onClose, content }) {
     const [showQuizConfig, setShowQuizConfig] = useState(false);
     const [activeQuiz, setActiveQuiz] = useState(null);
     const [quizResults, setQuizResults] = useState(null);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const socket = useSocket();
 
     // Sync local content with prop
     useEffect(() => {
         setLocalContent(content);
+        restartTriggeredRef.current = false; // Reset restart trigger when content changes
+    }, [content?._id]);
+
+    // Initial check for premium access or complete hydration when modal opens
+    useEffect(() => {
+        const checkInitialAccess = async () => {
+            if (content?._id) {
+                try {
+                    const response = await apiClient.get(`/content/${content._id}`);
+                    if (response.data.success) {
+                        setLocalContent(response.data.data.content);
+                    }
+                } catch (error) {
+                    console.error('Initial content access check failed:', error);
+                    if (error.response?.status === 403) {
+                        setLocalContent(prev => ({ ...prev, isPremiumLocked: true }));
+                    }
+                }
+            }
+        };
+        checkInitialAccess();
     }, [content?._id]);
 
     // WebSocket Real-time Updates
     useEffect(() => {
-        if (!socket || !localContent) return;
+        if (!socket || !localContent || localContent.isPremiumLocked) return;
 
         const courseId = localContent.courseId?._id || localContent.courseId;
         if (courseId) {
@@ -107,12 +130,14 @@ export default function ContentViewer({ isOpen, onClose, content }) {
             socket.off('content:completed', handleCompleted);
             socket.off('content:failed', handleFailed);
         };
-    }, [socket, localContent?._id]);
+    }, [socket, localContent?._id, localContent?.isPremiumLocked]);
 
     // Polling for updates if not completed/failed
     const restartTriggeredRef = useRef(false);
 
     useEffect(() => {
+        if (!localContent?._id || localContent.isPremiumLocked) return;
+
         // Automatic extraction restart if opened again and was previously failed/cancelled
         const autoRestart = async () => {
             if (localContent?.processingStatus === 'failed' && !restartTriggeredRef.current) {
@@ -129,6 +154,9 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                     }
                 } catch (error) {
                     console.error('Failed to auto-restart processing:', error);
+                    if (error.response?.status === 403) {
+                        setLocalContent(prev => ({ ...prev, isPremiumLocked: true }));
+                    }
                 }
             }
         };
@@ -145,11 +173,15 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                     }
                 } catch (error) {
                     console.error('Polling error:', error);
+                    if (error.response?.status === 403) {
+                        clearInterval(pollInterval);
+                        setLocalContent(prev => ({ ...prev, isPremiumLocked: true }));
+                    }
                 }
             }, 5000);
         }
         return () => clearInterval(pollInterval);
-    }, [localContent?._id, localContent?.processingStatus]);
+    }, [localContent?._id, localContent?.processingStatus, localContent?.isPremiumLocked]);
 
     // AI Processing Countdown logic
     useEffect(() => {
@@ -843,6 +875,70 @@ export default function ContentViewer({ isOpen, onClose, content }) {
                 );
         }
     };
+
+    if (localContent?.isPremiumLocked) {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="bg-card w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-yellow-500/20 flex flex-col items-center justify-center text-center p-8 sm:p-12 relative"
+                >
+                    {/* Close Button */}
+                    <button
+                        onClick={onClose}
+                        className="absolute top-6 right-6 p-2 rounded-full hover:bg-secondary/80 text-muted-foreground transition-all"
+                    >
+                        <X className="w-6 h-6" />
+                    </button>
+
+                    {/* Gold Crown Icon with Premium Animations */}
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-yellow-500/20 to-amber-500/10 flex items-center justify-center mb-6 border border-yellow-500/30 shadow-[0_0_50px_rgba(234,179,8,0.15)] relative">
+                        <Crown className="w-10 h-10 text-yellow-500 animate-bounce" style={{ animationDuration: '3s' }} />
+                        <div className="absolute inset-0 rounded-full border border-yellow-500/40 animate-ping opacity-25" style={{ animationDuration: '2s' }} />
+                    </div>
+
+                    <h2 className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 bg-clip-text text-transparent mb-3 tracking-tight">
+                        Premium Resource Locked
+                    </h2>
+
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-8 max-w-md leading-relaxed">
+                        This interactive resource features deep AI indexing, automated smart summaries, visual flowcharts, and custom tutor support.
+                        <br />
+                        <span className="font-bold text-foreground mt-2 inline-block">Upgrade to Premium to unlock access!</span>
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
+                        <button
+                            onClick={() => setShowUpgradeModal(true)}
+                            className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white font-black rounded-xl text-xs sm:text-sm shadow-xl shadow-yellow-500/10 hover:shadow-yellow-500/20 hover:scale-[1.02] transition-all"
+                        >
+                            Unlock Premium Access
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="w-full sm:w-auto px-8 py-3 bg-secondary hover:bg-secondary/80 text-muted-foreground font-bold rounded-xl text-xs sm:text-sm transition-all"
+                        >
+                            Go Back
+                        </button>
+                    </div>
+
+                    {/* Upgrade Modal */}
+                    <Suspense fallback={null}>
+                        {showUpgradeModal && (
+                            <UpgradeModal
+                                isOpen={showUpgradeModal}
+                                onClose={() => setShowUpgradeModal(false)}
+                                institutionId={localContent?.institutionId?._id || localContent?.institutionId}
+                                user={null}
+                            />
+                        )}
+                    </Suspense>
+                </motion.div>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-0">
