@@ -187,10 +187,23 @@ def extract_youtube(video_url):
                 
                 # 2. Fetch transcript via youtube-transcript-api
                 from youtube_transcript_api import YouTubeTranscriptApi
+                import http.cookiejar
+                
+                session = requests.Session()
+                if cookies_path and os.path.exists(cookies_path):
+                    print(f"🍪 Passing cookies to youtube-transcript-api from {cookies_path}...")
+                    try:
+                        cj = http.cookiejar.MozillaCookieJar(cookies_path)
+                        cj.load(ignore_discard=True, ignore_expires=True)
+                        session.cookies = cj
+                        print("🍪 Cookies successfully loaded into transcript session!")
+                    except Exception as cookie_err:
+                        print(f"⚠️ Failed to load cookies into transcript session: {cookie_err}")
+                
                 print(f"📄 Fetching transcripts for {video_id_clean} using youtube-transcript-api...")
                 
-                # Retrieve transcript list to grab the first available translation or auto-generated track
-                transcript_list = YouTubeTranscriptApi().list(video_id_clean)
+                # Retrieve transcript list using the authenticated session
+                transcript_list = YouTubeTranscriptApi(http_client=session).list(video_id_clean)
                 first_transcript = next(iter(transcript_list))
                 print(f"✅ Found transcript in {first_transcript.language} ({first_transcript.language_code})")
                 
