@@ -169,6 +169,71 @@ def extract_youtube(video_url):
     extracted_from = "whisper_model"
 
     try:
+        # === NEW: High-Speed Subtitle & Metadata Bypass ===
+        try:
+            print(f"🚀 Attempting fast subtitle & metadata bypass for {video_url}...")
+            video_id_clean = extract_video_id(video_url)
+            
+            # 1. Fetch metadata via open OEmbed API
+            import requests
+            oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id_clean}&format=json"
+            metadata_res = requests.get(oembed_url, timeout=10)
+            
+            if metadata_res.status_code == 200:
+                oembed_data = metadata_res.json()
+                title = oembed_data.get('title', 'YouTube Video')
+                uploader = oembed_data.get('author_name', 'Unknown')
+                thumbnail = oembed_data.get('thumbnail_url', f"https://img.youtube.com/vi/{video_id_clean}/hqdefault.jpg")
+                
+                # 2. Fetch transcript via youtube-transcript-api
+                from youtube_transcript_api import YouTubeTranscriptApi
+                print(f"📄 Fetching transcripts for {video_id_clean} using youtube-transcript-api...")
+                
+                # Retrieve transcript list to grab the first available translation or auto-generated track
+                transcript_list = YouTubeTranscriptApi().list(video_id_clean)
+                first_transcript = next(iter(transcript_list))
+                print(f"✅ Found transcript in {first_transcript.language} ({first_transcript.language_code})")
+                
+                fetched_segments = first_transcript.fetch()
+                
+                # 3. Format segments and full text exactly as expected by backend/RAG
+                subs_text = " ".join([seg.text for seg in fetched_segments])
+                segments = []
+                for seg in fetched_segments:
+                    segments.append({
+                        "text": seg.text,
+                        "start": float(seg.start),
+                        "end": float(seg.start + seg.duration)
+                    })
+                    
+                metadata = {
+                    "title": title,
+                    "description": f"Processed via High-Speed YouTube Subtitle Bypass. Uploader: {uploader}",
+                    "duration": segments[-1]["end"] if segments else 0,
+                    "uploader": uploader,
+                    "view_count": 0,
+                    "thumbnail": thumbnail,
+                    "youtube_id": video_id_clean
+                }
+                
+                print(f"✨ Fast Subtitle Bypass SUCCESSFUL for {video_id_clean}! Returning {len(segments)} segments.")
+                return {
+                    "success": True,
+                    "metadata": metadata,
+                    "text": subs_text,
+                    "segments": segments,
+                    "language": first_transcript.language_code,
+                    "summary": subs_text[:500] + "..." if len(subs_text) > 500 else subs_text,
+                    "thumbnail_url": thumbnail,
+                    "thumbnail_public_id": "youtube",
+                    "extracted_from": "youtube_subtitles_api"
+                }
+            else:
+                print(f"⚠️ OEmbed status was {metadata_res.status_code}. Skipping fast bypass...")
+                
+        except Exception as fast_e:
+            print(f"⚠️ High-speed subtitle bypass was not available: {fast_e}. Falling back to standard pipeline...")
+
         # Inner try-except for the download step
         try:
             # 1. Attempt to extract metadata and download audio via yt-dlp first
