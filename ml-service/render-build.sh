@@ -4,6 +4,7 @@ set -o errexit
 
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install -U yt-dlp
 
 # Install Playwright browser during build phase
 python -m playwright install chromium
