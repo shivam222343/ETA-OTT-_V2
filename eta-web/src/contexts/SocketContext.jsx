@@ -16,8 +16,10 @@ export const SocketProvider = ({ children }) => {
     const [socket, setSocket] = useState(null);
     const { user, token } = useAuth();
 
+    const userId = user?.id || user?._id;
+
     useEffect(() => {
-        if (user && token) {
+        if (userId && token) {
             const apiURL = import.meta.env.VITE_API_URL || window.location.origin + '/api';
             const socketURL = apiURL.replace('/api', '');
 
@@ -31,7 +33,7 @@ export const SocketProvider = ({ children }) => {
 
             newSocket.on('connect', () => {
                 console.log('Connected to WebSocket server');
-                newSocket.emit('join:user', user._id || user.id);
+                newSocket.emit('join:user', userId);
             });
 
             newSocket.on('connect_error', (error) => {
@@ -44,7 +46,7 @@ export const SocketProvider = ({ children }) => {
                 newSocket.disconnect();
             };
         }
-    }, [user, token]);
+    }, [userId, token]);
 
     return (
         <SocketContext.Provider value={socket}>

@@ -7,10 +7,11 @@ const SOCKET_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').rep
 export const useSocket = () => {
     const [socket, setSocket] = useState(null);
     const { user } = useAuth();
+    const userId = user?.id || user?._id;
 
     useEffect(() => {
         const token = localStorage.getItem('token');
-        if (!token || !user) return;
+        if (!token || !userId) return;
 
         const newSocket = io(SOCKET_URL, {
             auth: { token },
@@ -18,8 +19,8 @@ export const useSocket = () => {
         });
 
         // Join user-specific room automatically
-        newSocket.emit('join:user', user._id);
-        console.log(`Connected to socket and joined room for user: ${user._id}`);
+        newSocket.emit('join:user', userId);
+        console.log(`Connected to socket and joined room for user: ${userId}`);
 
         setSocket(newSocket);
 
@@ -27,7 +28,7 @@ export const useSocket = () => {
             console.log('Closing socket connection');
             newSocket.close();
         };
-    }, [user]);
+    }, [userId]);
 
     return socket;
 };

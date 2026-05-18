@@ -409,9 +409,8 @@ export default function CourseResources() {
 
             <AnimatePresence mode="wait">
                 {selectedContent && (
-                    <Suspense fallback={<Loader />}>
+                    <Suspense key="content-viewer-suspense" fallback={<Loader />}>
                         <motion.div
-                            key="content-viewer-overlay"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
@@ -426,9 +425,8 @@ export default function CourseResources() {
                     </Suspense>
                 )}
                 {showInfoModal && (
-                    <Suspense fallback={null}>
+                    <Suspense key="info-modal-suspense" fallback={null}>
                         <ExtractedInfoModal
-                            key="info-modal-overlay"
                             isOpen={showInfoModal}
                             onClose={() => {
                                 setShowInfoModal(false);
