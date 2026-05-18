@@ -87,6 +87,10 @@ def extract_youtube(video_url):
     elif os.path.exists(local_cookie_file):
         cookies_path = local_cookie_file
 
+    proxy_url = os.getenv('YOUTUBE_PROXY')
+    if proxy_url:
+        print(f"🌐 Proxy configured for YouTube extraction: {proxy_url[:30]}...")
+
     # yt-dlp options - output to specific job directory
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -106,6 +110,8 @@ def extract_youtube(video_url):
         'skip_download': False,
         'ignoreerrors': False,  # Let it throw actual errors so we can catch and diagnose them
     }
+    if proxy_url:
+        ydl_opts['proxy'] = proxy_url
 
     def extract_video_id(url):
         import re
@@ -177,7 +183,9 @@ def extract_youtube(video_url):
             # 1. Fetch metadata via open OEmbed API
             import requests
             oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id_clean}&format=json"
-            metadata_res = requests.get(oembed_url, timeout=10)
+            
+            proxies_dict = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+            metadata_res = requests.get(oembed_url, proxies=proxies_dict, timeout=10)
             
             if metadata_res.status_code == 200:
                 oembed_data = metadata_res.json()
@@ -190,6 +198,10 @@ def extract_youtube(video_url):
                 import http.cookiejar
                 
                 session = requests.Session()
+                if proxy_url:
+                    print("🌐 Passing proxy configuration to transcript requests session...")
+                    session.proxies = proxies_dict
+                    
                 if cookies_path and os.path.exists(cookies_path):
                     print(f"🍪 Passing cookies to youtube-transcript-api from {cookies_path}...")
                     try:
