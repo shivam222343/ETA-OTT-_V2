@@ -64,6 +64,11 @@ def extract_youtube(video_url):
     render_secret_file = "/etc/secrets/youtube_cookies.txt"
     local_cookie_file = os.path.abspath("youtube_cookies.txt")
     
+    print(f"🍪 Cookie Debug (Job {job_id}):")
+    print(f"   - YOUTUBE_COOKIES_CONTENT present: {bool(env_cookies)}")
+    print(f"   - Render secret file exists at {render_secret_file}: {os.path.exists(render_secret_file)}")
+    print(f"   - Local cookie file exists at {local_cookie_file}: {os.path.exists(local_cookie_file)}")
+    
     if env_cookies:
         # If cookies are in env, write them to a temp file for this job
         # Handle cases where literal \\n is pasted in env var

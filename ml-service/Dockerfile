@@ -40,6 +40,7 @@ RUN playwright install --with-deps chromium
 # Copy application source
 COPY main.py ./
 COPY extractors/ ./extractors/
+COPY youtube_cookies.tx[t] ./
 
 # Set ownership
 RUN chown -R etaml:etaml /app
