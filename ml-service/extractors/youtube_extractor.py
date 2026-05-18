@@ -30,6 +30,16 @@ def setup_ffmpeg():
             print(f"FFmpeg setup failed: {str(e)}")
             return False
 
+def setup_js_runtime():
+    """Ensure a JavaScript runtime (Deno/Node) is in PATH for yt-dlp signature deciphering."""
+    # Add portable Deno (installed during Render native build phase) to PATH
+    home_deno_dir = os.path.expanduser("~/.deno/bin")
+    if os.path.exists(home_deno_dir) and home_deno_dir not in os.environ["PATH"]:
+        os.environ["PATH"] = home_deno_dir + os.pathsep + os.environ["PATH"]
+        print(f"✅ Added Deno JS runtime path to environment: {home_deno_dir}")
+        return True
+    return False
+
 def extract_youtube(video_url):
     """
     Extracts audio from a YouTube video and transcribes it using Whisper.
@@ -41,8 +51,9 @@ def extract_youtube(video_url):
     job_dir = os.path.join(base_temp, job_id)
     os.makedirs(job_dir, exist_ok=True)
     
-    # Ensure FFmpeg is available
+    # Ensure FFmpeg and a JS runtime are available
     setup_ffmpeg()
+    setup_js_runtime()
     
     # 1. Handle Cookies (Securely)
     # Priority: Env Var (Secret) > Render Secret File > Local File
@@ -91,62 +102,142 @@ def extract_youtube(video_url):
         'ignoreerrors': False,  # Let it throw actual errors so we can catch and diagnose them
     }
 
+    def extract_video_id(url):
+        import re
+        pattern = r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})'
+        match = re.search(pattern, url)
+        return match.group(1) if match else "youtube"
+
+    def download_via_cobalt(video_url, job_dir):
+        """
+        Fallback method using public Cobalt API instances to get direct audio link,
+        bypassing yt-dlp/YouTube bot detection blocks on Render.
+        """
+        import requests
+        cobalt_instances = [
+            "https://api.cobalt.tools",
+            "https://cobalt.api.ryzetech.live",
+            "https://co.wuk.sh"
+        ]
+        
+        for instance in cobalt_instances:
+            try:
+                print(f"🔄 Attempting fallback extraction via Cobalt ({instance})...")
+                payload = {
+                    "url": video_url,
+                    "isAudioOnly": True,
+                    "audioFormat": "mp3",
+                    "aFormat": "mp3"
+                }
+                headers = {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                }
+                response = requests.post(instance, json=payload, headers=headers, timeout=15)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status") in ["stream", "redirect"] and data.get("url"):
+                        stream_url = data.get("url")
+                        print(f"✅ Cobalt returned stream URL: {stream_url[:50]}...")
+                        
+                        audio_path = os.path.join(job_dir, "cobalt_audio.mp3")
+                        audio_response = requests.get(stream_url, stream=True, timeout=90)
+                        if audio_response.status_code == 200:
+                            with open(audio_path, 'wb') as f:
+                                for chunk in audio_response.iter_content(chunk_size=8192):
+                                    f.write(chunk)
+                            file_size = os.path.getsize(audio_path)
+                            print(f"📥 Downloaded audio via Cobalt: {file_size / 1024 / 1024:.2f} MB")
+                            
+                            filename = data.get("filename", "YouTube Video")
+                            title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+                            
+                            return audio_path, title
+            except Exception as e:
+                print(f"⚠️ Cobalt instance {instance} failed: {e}")
+                
+        return None, None
+
     audio_path = None
+    metadata = {}
+    subs_text = None
+    extracted_from = "whisper_model"
+
     try:
-        #what if the user is not logged in
-        #a change here --------------------------->
-        # 1. Extract metadata and download audio
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print(f"📥 Downloading YouTube metadata/audio for job {job_id}...")
-            info = ydl.extract_info(video_url, download=True)
-            if info is None:
-                raise Exception("YouTube extraction completely failed. The cookies might be invalid/expired, or YouTube is strictly blocking the server IP.")
-            video_id = info['id']
-            audio_path = os.path.join(job_dir, f"{video_id}.mp3")
-            
-            # Check for subtitles first
-            subtitles = info.get('requested_subtitles')
-            subs_text = None
-            
-            if subtitles:
-                print(f"📄 Found available subtitles for {video_id}, attempting to use them...")
-                # Find the downloaded subtitle file
-                # yt-dlp downloads them with .vtt or .srt extension
-                for file in os.listdir(job_dir):
-                    if (file.endswith('.vtt') or file.endswith('.srt')) and video_id in file:
-                        sub_file_path = os.path.join(job_dir, file)
-                        try:
-                            with open(sub_file_path, 'r', encoding='utf-8') as f:
-                                # Simple VTT/SRT parsing or just cleaning up
-                                content = f.read()
-                                # Extremely crude way to get just text (better than nothing)
-                                import re
-                                # Remove timestamps and metadata
-                                content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}', '', content)
-                                content = re.sub(r'<[^>]*>', '', content)
-                                content = re.sub(r'WEBVTT|Kind:.*|Language:.*', '', content)
-                                # Remove line numbers (for SRT)
-                                content = re.sub(r'^\d+$', '', content, flags=re.MULTILINE)
-                                # Clean up extra whitespace
-                                lines = [line.strip() for line in content.split('\n') if line.strip()]
-                                subs_text = ' '.join(lines)
-                                if len(subs_text) > 50: # Ensure we actually got something
-                                    print(f"✅ Successfully extracted {len(subs_text)} chars from YouTube subtitles.")
-                                    break
-                        except Exception as sub_e:
-                            print(f"⚠️ Subtitle parsing failed: {sub_e}")
+        # Inner try-except for the download step
+        try:
+            # 1. Attempt to extract metadata and download audio via yt-dlp first
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                print(f"📥 Downloading YouTube metadata/audio for job {job_id} via yt-dlp...")
+                info = ydl.extract_info(video_url, download=True)
+                if info is None:
+                    raise Exception("YouTube extraction completely failed. The cookies might be invalid/expired, or YouTube is strictly blocking the server IP.")
+                video_id = info['id']
+                audio_path = os.path.join(job_dir, f"{video_id}.mp3")
+                
+                # Check for subtitles first
+                subtitles = info.get('requested_subtitles')
+                if subtitles:
+                    print(f"📄 Found available subtitles for {video_id}, attempting to use them...")
+                    # Find the downloaded subtitle file
+                    # yt-dlp downloads them with .vtt or .srt extension
+                    for file in os.listdir(job_dir):
+                        if (file.endswith('.vtt') or file.endswith('.srt')) and video_id in file:
+                            sub_file_path = os.path.join(job_dir, file)
+                            try:
+                                with open(sub_file_path, 'r', encoding='utf-8') as f:
+                                    # Simple VTT/SRT parsing or just cleaning up
+                                    content = f.read()
+                                    # Extremely crude way to get just text (better than nothing)
+                                    import re
+                                    # Remove timestamps and metadata
+                                    content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}', '', content)
+                                    content = re.sub(r'<[^>]*>', '', content)
+                                    content = re.sub(r'WEBVTT|Kind:.*|Language:.*', '', content)
+                                    # Remove line numbers (for SRT)
+                                    content = re.sub(r'^\d+$', '', content, flags=re.MULTILINE)
+                                    # Clean up extra whitespace
+                                    lines = [line.strip() for line in content.split('\n') if line.strip()]
+                                    subs_text = ' '.join(lines)
+                                    if len(subs_text) > 50: # Ensure we actually got something
+                                        print(f"✅ Successfully extracted {len(subs_text)} chars from YouTube subtitles.")
+                                        extracted_from = "youtube_subtitles"
+                                        break
+                            except Exception as sub_e:
+                                print(f"⚠️ Subtitle parsing failed: {sub_e}")
 
-            metadata = {
-                "title": info.get('title'),
-                "description": info.get('description'),
-                "duration": info.get('duration'),
-                "uploader": info.get('uploader'),
-                "view_count": info.get('view_count'),
-                "thumbnail": info.get('thumbnail'),
-                "youtube_id": info.get('id')
-            }
+                metadata = {
+                    "title": info.get('title'),
+                    "description": info.get('description'),
+                    "duration": info.get('duration'),
+                    "uploader": info.get('uploader'),
+                    "view_count": info.get('view_count'),
+                    "thumbnail": info.get('thumbnail'),
+                    "youtube_id": info.get('id')
+                }
+        except Exception as ytdl_err:
+            print(f"⚠️ yt-dlp extraction failed: {ytdl_err}. Trying Cobalt fallback...")
+            
+            # 2. Try Cobalt API fallback if yt-dlp is blocked
+            fallback_audio, cobalt_title = download_via_cobalt(video_url, job_dir)
+            if fallback_audio:
+                audio_path = fallback_audio
+                video_id = extract_video_id(video_url)
+                metadata = {
+                    "title": cobalt_title or "YouTube Video (Cobalt Fallback)",
+                    "description": "Extracted via Cobalt API fallback bypass.",
+                    "duration": 0,  # Whisper transcription will define the text
+                    "uploader": "Unknown",
+                    "view_count": 0,
+                    "thumbnail": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                    "youtube_id": video_id
+                }
+                extracted_from = "whisper_model"
+            else:
+                # If even Cobalt failed, raise the original yt-dlp error
+                raise ytdl_err
 
-        # 2. Transcribe only if subtitles weren't found
+        # 3. Return early if subtitles were successfully retrieved via yt-dlp
         if subs_text:
             return {
                 "success": True,
@@ -157,10 +248,10 @@ def extract_youtube(video_url):
                 "summary": subs_text[:500] + "..." if len(subs_text) > 500 else subs_text,
                 "thumbnail_url": metadata.get("thumbnail"),
                 "thumbnail_public_id": "youtube",
-                "extracted_from": "youtube_subtitles"
+                "extracted_from": extracted_from
             }
 
-        # 2. Transcribe with Whisper (Fallback)
+        # 4. Transcribe with Whisper (Fallback)
         from model_loader import get_whisper_model, get_whisper_lock
         whisper_model = get_whisper_model()
         whisper_lock = get_whisper_lock()
