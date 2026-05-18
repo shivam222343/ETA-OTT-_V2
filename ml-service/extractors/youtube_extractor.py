@@ -297,7 +297,8 @@ def extract_youtube(video_url):
                 "YouTube bot detection blocked the request. "
                 "TIP: Since this is running on Render, YouTube has flagged the server IP. "
                 "To fix: Export your YouTube cookies using a 'Get cookies.txt' browser extension, "
-                "save it as 'youtube_cookies.txt' in the ml-service folder, and redeploy."
+                "save it as 'youtube_cookies.txt' in the ml-service folder, and redeploy. "
+                f"| Raw Error: {error_msg}"
             )
             
         return {
